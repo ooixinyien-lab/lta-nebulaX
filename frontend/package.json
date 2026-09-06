@@ -1,0 +1,7 @@
+{
+  "name": "railplan-no-build-frontend",
+  "private": true,
+  "type": "module",
+  "description": "Native browser ES modules. No npm install or frontend build required.",
+  "scripts": {"check": "node ../scripts/check-js.mjs"}
+}

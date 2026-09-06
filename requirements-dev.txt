@@ -1,0 +1,2 @@
+-r requirements-cpsat.txt
+pytest>=8,<10

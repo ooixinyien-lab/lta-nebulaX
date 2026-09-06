@@ -1,0 +1,7 @@
+# Small local website + API; versions present in the build environment.
+fastapi==0.128.2
+uvicorn==0.48.0
+pydantic==2.13.4
+pydantic-settings==2.14.1
+httpx==0.28.1
+tzdata>=2025.1

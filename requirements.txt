@@ -1,0 +1,2 @@
+-r requirements-core.txt
+# The initial demo runs without OR-Tools. See requirements-cpsat.txt.

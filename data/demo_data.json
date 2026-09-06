@@ -1,0 +1,749 @@
+{
+  "metadata": {
+    "schema_version": "1.0",
+    "planning_version": 1,
+    "timezone": "Asia/Singapore",
+    "synthetic": true,
+    "description": "Fictional single-direction railway corridor for a hackathon prototype.",
+    "disclaimer": "NOT LTA, SMRT or SBS Transit operational data. All locations, rules, timings, skills and bookings are invented. Model-feasible does not mean authorised or operationally safe.",
+    "scope": "Four-request teaching fixture, not a full railway model. No live interfaces. No production authentication. No executable railway controls.",
+    "simplifications": [
+      "One abstract track direction; no real operational geography.",
+      "Full-request protection footprints are exclusive in this fixture.",
+      "All phases of a request use the same stated power requirement in this fixture.",
+      "Power transition minutes are a synthetic planning guard, not a switching procedure.",
+      "Named engineers and equipment use a synthetic 15-minute inter-site transfer allowance.",
+      "Pooled technicians are interchangeable capacity only; individual technician routes are not modelled.",
+      "No engineering-vehicle routes are included in this four-request fixture. Such a module needs separate, explicit movement reservations.",
+      "The first assigned job is assumed reachable by its assigned resources before its start.",
+      "Tasks cannot be split, interrupted, or shortened."
+    ]
+  },
+  "stations": [
+    {
+      "id": "N01",
+      "name": "Demo Station A",
+      "schematic_x": 0
+    },
+    {
+      "id": "N02",
+      "name": "Demo Station B",
+      "schematic_x": 1
+    },
+    {
+      "id": "N03",
+      "name": "Demo Station C",
+      "schematic_x": 2
+    },
+    {
+      "id": "N04",
+      "name": "Demo Station D",
+      "schematic_x": 3
+    },
+    {
+      "id": "N05",
+      "name": "Demo Station E",
+      "schematic_x": 4
+    },
+    {
+      "id": "N06",
+      "name": "Demo Station F",
+      "schematic_x": 5
+    },
+    {
+      "id": "N07",
+      "name": "Demo Station G",
+      "schematic_x": 6
+    }
+  ],
+  "sectors": [
+    {
+      "id": "S01",
+      "from_station": "N01",
+      "to_station": "N02",
+      "direction": "A_to_G",
+      "power_zone": "Z01",
+      "exclusive_protection": true
+    },
+    {
+      "id": "S02",
+      "from_station": "N02",
+      "to_station": "N03",
+      "direction": "A_to_G",
+      "power_zone": "Z01",
+      "exclusive_protection": true
+    },
+    {
+      "id": "S03",
+      "from_station": "N03",
+      "to_station": "N04",
+      "direction": "A_to_G",
+      "power_zone": "Z02",
+      "exclusive_protection": true
+    },
+    {
+      "id": "S04",
+      "from_station": "N04",
+      "to_station": "N05",
+      "direction": "A_to_G",
+      "power_zone": "Z02",
+      "exclusive_protection": true
+    },
+    {
+      "id": "S05",
+      "from_station": "N05",
+      "to_station": "N06",
+      "direction": "A_to_G",
+      "power_zone": "Z03",
+      "exclusive_protection": true
+    },
+    {
+      "id": "S06",
+      "from_station": "N06",
+      "to_station": "N07",
+      "direction": "A_to_G",
+      "power_zone": "Z03",
+      "exclusive_protection": true
+    }
+  ],
+  "engineering_windows": [
+    {
+      "date": "2026-09-14",
+      "sector_ids": [
+        "S01",
+        "S02",
+        "S03",
+        "S04",
+        "S05",
+        "S06"
+      ],
+      "start": "2026-09-14T01:00:00+08:00",
+      "end": "2026-09-14T04:30:00+08:00"
+    },
+    {
+      "date": "2026-09-15",
+      "sector_ids": [
+        "S01",
+        "S02",
+        "S03",
+        "S04",
+        "S05",
+        "S06"
+      ],
+      "start": "2026-09-15T01:00:00+08:00",
+      "end": "2026-09-15T04:30:00+08:00"
+    },
+    {
+      "date": "2026-09-16",
+      "sector_ids": [
+        "S01",
+        "S02",
+        "S03",
+        "S04",
+        "S05",
+        "S06"
+      ],
+      "start": "2026-09-16T01:00:00+08:00",
+      "end": "2026-09-16T04:30:00+08:00"
+    },
+    {
+      "date": "2026-09-17",
+      "sector_ids": [
+        "S01",
+        "S02",
+        "S03",
+        "S04",
+        "S05",
+        "S06"
+      ],
+      "start": "2026-09-17T01:00:00+08:00",
+      "end": "2026-09-17T04:30:00+08:00"
+    },
+    {
+      "date": "2026-09-18",
+      "sector_ids": [
+        "S01",
+        "S02",
+        "S03",
+        "S04",
+        "S05",
+        "S06"
+      ],
+      "start": "2026-09-18T01:00:00+08:00",
+      "end": "2026-09-18T04:30:00+08:00"
+    },
+    {
+      "date": "2026-09-19",
+      "sector_ids": [
+        "S01",
+        "S02",
+        "S03",
+        "S04",
+        "S05",
+        "S06"
+      ],
+      "start": "2026-09-19T01:00:00+08:00",
+      "end": "2026-09-19T04:30:00+08:00"
+    },
+    {
+      "date": "2026-09-20",
+      "sector_ids": [
+        "S01",
+        "S02",
+        "S03",
+        "S04",
+        "S05",
+        "S06"
+      ],
+      "start": "2026-09-20T01:00:00+08:00",
+      "end": "2026-09-20T04:30:00+08:00"
+    }
+  ],
+  "blackouts": [
+    {
+      "id": "B01",
+      "sector_ids": [
+        "S06"
+      ],
+      "start": "2026-09-14T03:00:00+08:00",
+      "end": "2026-09-14T04:30:00+08:00",
+      "reason": "Synthetic reserved access restriction"
+    }
+  ],
+  "planning_rules": {
+    "source": "Prototype assumptions, NOT an operator rulebook",
+    "start_grid_minutes": 5,
+    "different_site_transfer_minutes": 15,
+    "opposed_power_transition_minutes": 10,
+    "power_values": [
+      "ON",
+      "OFF",
+      "ANY"
+    ],
+    "power_compatibility": {
+      "ON": {
+        "ON": true,
+        "OFF": false,
+        "ANY": true
+      },
+      "OFF": {
+        "ON": false,
+        "OFF": true,
+        "ANY": true
+      },
+      "ANY": {
+        "ON": true,
+        "OFF": true,
+        "ANY": true
+      }
+    },
+    "unknown_rule_policy": "REVIEW_REQUIRED"
+  },
+  "engineers": [
+    {
+      "id": "E01",
+      "name": "Demo E01",
+      "skills": [
+        "track"
+      ],
+      "initial_sector": "S02",
+      "availability": [
+        {
+          "start": "2026-09-14T01:00:00+08:00",
+          "end": "2026-09-14T04:30:00+08:00"
+        },
+        {
+          "start": "2026-09-15T01:00:00+08:00",
+          "end": "2026-09-15T04:30:00+08:00"
+        },
+        {
+          "start": "2026-09-16T01:00:00+08:00",
+          "end": "2026-09-16T04:30:00+08:00"
+        },
+        {
+          "start": "2026-09-17T01:00:00+08:00",
+          "end": "2026-09-17T04:30:00+08:00"
+        },
+        {
+          "start": "2026-09-18T01:00:00+08:00",
+          "end": "2026-09-18T04:30:00+08:00"
+        },
+        {
+          "start": "2026-09-19T01:00:00+08:00",
+          "end": "2026-09-19T04:30:00+08:00"
+        },
+        {
+          "start": "2026-09-20T01:00:00+08:00",
+          "end": "2026-09-20T04:30:00+08:00"
+        }
+      ],
+      "unavailable": []
+    },
+    {
+      "id": "E02",
+      "name": "Demo E02",
+      "skills": [
+        "inspection"
+      ],
+      "initial_sector": "S05",
+      "availability": [
+        {
+          "start": "2026-09-14T01:00:00+08:00",
+          "end": "2026-09-14T04:30:00+08:00"
+        },
+        {
+          "start": "2026-09-15T01:00:00+08:00",
+          "end": "2026-09-15T04:30:00+08:00"
+        },
+        {
+          "start": "2026-09-16T01:00:00+08:00",
+          "end": "2026-09-16T04:30:00+08:00"
+        },
+        {
+          "start": "2026-09-17T01:00:00+08:00",
+          "end": "2026-09-17T04:30:00+08:00"
+        },
+        {
+          "start": "2026-09-18T01:00:00+08:00",
+          "end": "2026-09-18T04:30:00+08:00"
+        },
+        {
+          "start": "2026-09-19T01:00:00+08:00",
+          "end": "2026-09-19T04:30:00+08:00"
+        },
+        {
+          "start": "2026-09-20T01:00:00+08:00",
+          "end": "2026-09-20T04:30:00+08:00"
+        }
+      ],
+      "unavailable": []
+    },
+    {
+      "id": "E03",
+      "name": "Demo E03",
+      "skills": [
+        "signalling"
+      ],
+      "initial_sector": "S01",
+      "availability": [
+        {
+          "start": "2026-09-14T01:00:00+08:00",
+          "end": "2026-09-14T04:30:00+08:00"
+        },
+        {
+          "start": "2026-09-15T01:00:00+08:00",
+          "end": "2026-09-15T04:30:00+08:00"
+        },
+        {
+          "start": "2026-09-16T01:00:00+08:00",
+          "end": "2026-09-16T04:30:00+08:00"
+        },
+        {
+          "start": "2026-09-17T01:00:00+08:00",
+          "end": "2026-09-17T04:30:00+08:00"
+        },
+        {
+          "start": "2026-09-18T01:00:00+08:00",
+          "end": "2026-09-18T04:30:00+08:00"
+        },
+        {
+          "start": "2026-09-19T01:00:00+08:00",
+          "end": "2026-09-19T04:30:00+08:00"
+        },
+        {
+          "start": "2026-09-20T01:00:00+08:00",
+          "end": "2026-09-20T04:30:00+08:00"
+        }
+      ],
+      "unavailable": []
+    },
+    {
+      "id": "E04",
+      "name": "Demo E04",
+      "skills": [
+        "track"
+      ],
+      "initial_sector": "S04",
+      "availability": [
+        {
+          "start": "2026-09-14T01:00:00+08:00",
+          "end": "2026-09-14T04:30:00+08:00"
+        },
+        {
+          "start": "2026-09-15T01:00:00+08:00",
+          "end": "2026-09-15T04:30:00+08:00"
+        },
+        {
+          "start": "2026-09-16T01:00:00+08:00",
+          "end": "2026-09-16T04:30:00+08:00"
+        },
+        {
+          "start": "2026-09-17T01:00:00+08:00",
+          "end": "2026-09-17T04:30:00+08:00"
+        },
+        {
+          "start": "2026-09-18T01:00:00+08:00",
+          "end": "2026-09-18T04:30:00+08:00"
+        },
+        {
+          "start": "2026-09-19T01:00:00+08:00",
+          "end": "2026-09-19T04:30:00+08:00"
+        },
+        {
+          "start": "2026-09-20T01:00:00+08:00",
+          "end": "2026-09-20T04:30:00+08:00"
+        }
+      ],
+      "unavailable": []
+    }
+  ],
+  "equipment": [
+    {
+      "id": "Q01",
+      "type": "track_machine",
+      "initial_sector": "S02",
+      "capacity": 1,
+      "availability": [
+        {
+          "start": "2026-09-14T01:00:00+08:00",
+          "end": "2026-09-14T04:30:00+08:00"
+        },
+        {
+          "start": "2026-09-15T01:00:00+08:00",
+          "end": "2026-09-15T04:30:00+08:00"
+        },
+        {
+          "start": "2026-09-16T01:00:00+08:00",
+          "end": "2026-09-16T04:30:00+08:00"
+        },
+        {
+          "start": "2026-09-17T01:00:00+08:00",
+          "end": "2026-09-17T04:30:00+08:00"
+        },
+        {
+          "start": "2026-09-18T01:00:00+08:00",
+          "end": "2026-09-18T04:30:00+08:00"
+        },
+        {
+          "start": "2026-09-19T01:00:00+08:00",
+          "end": "2026-09-19T04:30:00+08:00"
+        },
+        {
+          "start": "2026-09-20T01:00:00+08:00",
+          "end": "2026-09-20T04:30:00+08:00"
+        }
+      ],
+      "unavailable": [],
+      "serviceable": true
+    },
+    {
+      "id": "Q02",
+      "type": "inspection_kit",
+      "initial_sector": "S05",
+      "capacity": 1,
+      "availability": [
+        {
+          "start": "2026-09-14T01:00:00+08:00",
+          "end": "2026-09-14T04:30:00+08:00"
+        },
+        {
+          "start": "2026-09-15T01:00:00+08:00",
+          "end": "2026-09-15T04:30:00+08:00"
+        },
+        {
+          "start": "2026-09-16T01:00:00+08:00",
+          "end": "2026-09-16T04:30:00+08:00"
+        },
+        {
+          "start": "2026-09-17T01:00:00+08:00",
+          "end": "2026-09-17T04:30:00+08:00"
+        },
+        {
+          "start": "2026-09-18T01:00:00+08:00",
+          "end": "2026-09-18T04:30:00+08:00"
+        },
+        {
+          "start": "2026-09-19T01:00:00+08:00",
+          "end": "2026-09-19T04:30:00+08:00"
+        },
+        {
+          "start": "2026-09-20T01:00:00+08:00",
+          "end": "2026-09-20T04:30:00+08:00"
+        }
+      ],
+      "unavailable": [],
+      "serviceable": true
+    },
+    {
+      "id": "Q03",
+      "type": "test_kit",
+      "initial_sector": "S01",
+      "capacity": 1,
+      "availability": [
+        {
+          "start": "2026-09-14T01:00:00+08:00",
+          "end": "2026-09-14T04:30:00+08:00"
+        },
+        {
+          "start": "2026-09-15T01:00:00+08:00",
+          "end": "2026-09-15T04:30:00+08:00"
+        },
+        {
+          "start": "2026-09-16T01:00:00+08:00",
+          "end": "2026-09-16T04:30:00+08:00"
+        },
+        {
+          "start": "2026-09-17T01:00:00+08:00",
+          "end": "2026-09-17T04:30:00+08:00"
+        },
+        {
+          "start": "2026-09-18T01:00:00+08:00",
+          "end": "2026-09-18T04:30:00+08:00"
+        },
+        {
+          "start": "2026-09-19T01:00:00+08:00",
+          "end": "2026-09-19T04:30:00+08:00"
+        },
+        {
+          "start": "2026-09-20T01:00:00+08:00",
+          "end": "2026-09-20T04:30:00+08:00"
+        }
+      ],
+      "unavailable": [],
+      "serviceable": true
+    }
+  ],
+  "resource_pools": [
+    {
+      "id": "TECH",
+      "name": "Interchangeable general technicians",
+      "capacity": 4
+    }
+  ],
+  "requests": [
+    {
+      "id": "R01",
+      "title": "Demo rail work",
+      "status": "scheduled",
+      "owner_id": "demo-track",
+      "work_sector": "S02",
+      "protected_sectors": [
+        "S02"
+      ],
+      "power_zone": "Z01",
+      "power_requirement": "OFF",
+      "phases": [
+        {
+          "name": "setup",
+          "duration_minutes": 10
+        },
+        {
+          "name": "work",
+          "duration_minutes": 50
+        },
+        {
+          "name": "test",
+          "duration_minutes": 10
+        },
+        {
+          "name": "handback",
+          "duration_minutes": 10
+        }
+      ],
+      "required_skill": "track",
+      "eligible_engineers": [
+        "E01",
+        "E04"
+      ],
+      "preferred_engineer": "E01",
+      "required_equipment_ids": [
+        "Q01"
+      ],
+      "technicians_required": 2,
+      "preferred_start": "2026-09-14T01:00:00+08:00",
+      "allowed_dates": [
+        "2026-09-14"
+      ],
+      "earliest_start": "2026-09-14T01:00:00+08:00",
+      "deadline": "2026-09-14T04:30:00+08:00",
+      "depends_on": [],
+      "mandatory_in_this_demo": true,
+      "priority": "normal",
+      "split_allowed": false
+    },
+    {
+      "id": "R02",
+      "title": "Demo sensor inspection",
+      "status": "scheduled",
+      "owner_id": "demo-signals",
+      "work_sector": "S05",
+      "protected_sectors": [
+        "S05"
+      ],
+      "power_zone": "Z03",
+      "power_requirement": "ANY",
+      "phases": [
+        {
+          "name": "setup",
+          "duration_minutes": 10
+        },
+        {
+          "name": "work",
+          "duration_minutes": 30
+        },
+        {
+          "name": "test",
+          "duration_minutes": 10
+        },
+        {
+          "name": "handback",
+          "duration_minutes": 10
+        }
+      ],
+      "required_skill": "inspection",
+      "eligible_engineers": [
+        "E02"
+      ],
+      "preferred_engineer": "E02",
+      "required_equipment_ids": [
+        "Q02"
+      ],
+      "technicians_required": 1,
+      "preferred_start": "2026-09-14T01:30:00+08:00",
+      "allowed_dates": [
+        "2026-09-14"
+      ],
+      "earliest_start": "2026-09-14T01:00:00+08:00",
+      "deadline": "2026-09-14T04:30:00+08:00",
+      "depends_on": [],
+      "mandatory_in_this_demo": true,
+      "priority": "normal",
+      "split_allowed": false
+    },
+    {
+      "id": "R03",
+      "title": "Demo powered system test",
+      "status": "submitted",
+      "owner_id": "demo-signals",
+      "work_sector": "S01",
+      "protected_sectors": [
+        "S01"
+      ],
+      "power_zone": "Z01",
+      "power_requirement": "ON",
+      "phases": [
+        {
+          "name": "setup",
+          "duration_minutes": 10
+        },
+        {
+          "name": "work",
+          "duration_minutes": 30
+        },
+        {
+          "name": "test",
+          "duration_minutes": 10
+        },
+        {
+          "name": "handback",
+          "duration_minutes": 10
+        }
+      ],
+      "required_skill": "signalling",
+      "eligible_engineers": [
+        "E03"
+      ],
+      "preferred_engineer": "E03",
+      "required_equipment_ids": [
+        "Q03"
+      ],
+      "technicians_required": 1,
+      "preferred_start": "2026-09-14T01:30:00+08:00",
+      "allowed_dates": [
+        "2026-09-14",
+        "2026-09-15"
+      ],
+      "earliest_start": "2026-09-14T01:00:00+08:00",
+      "deadline": "2026-09-15T04:30:00+08:00",
+      "depends_on": [
+        "R01"
+      ],
+      "mandatory_in_this_demo": true,
+      "priority": "normal",
+      "split_allowed": false
+    },
+    {
+      "id": "R04",
+      "title": "Demo track repair",
+      "status": "submitted",
+      "owner_id": "demo-track",
+      "work_sector": "S04",
+      "protected_sectors": [
+        "S03",
+        "S04"
+      ],
+      "power_zone": "Z02",
+      "power_requirement": "OFF",
+      "phases": [
+        {
+          "name": "setup",
+          "duration_minutes": 10
+        },
+        {
+          "name": "work",
+          "duration_minutes": 45
+        },
+        {
+          "name": "test",
+          "duration_minutes": 10
+        },
+        {
+          "name": "handback",
+          "duration_minutes": 10
+        }
+      ],
+      "required_skill": "track",
+      "eligible_engineers": [
+        "E01",
+        "E04"
+      ],
+      "preferred_engineer": "E01",
+      "required_equipment_ids": [
+        "Q01"
+      ],
+      "technicians_required": 2,
+      "preferred_start": "2026-09-14T02:00:00+08:00",
+      "allowed_dates": [
+        "2026-09-14"
+      ],
+      "earliest_start": "2026-09-14T01:00:00+08:00",
+      "deadline": "2026-09-14T04:30:00+08:00",
+      "depends_on": [],
+      "mandatory_in_this_demo": true,
+      "priority": "normal",
+      "split_allowed": false
+    }
+  ],
+  "committed_allocations": [
+    {
+      "request_id": "R01",
+      "start": "2026-09-14T01:00:00+08:00",
+      "end": "2026-09-14T02:20:00+08:00",
+      "engineer_id": "E01",
+      "equipment_ids": [
+        "Q01"
+      ],
+      "locked": true
+    },
+    {
+      "request_id": "R02",
+      "start": "2026-09-14T01:30:00+08:00",
+      "end": "2026-09-14T02:30:00+08:00",
+      "engineer_id": "E02",
+      "equipment_ids": [
+        "Q02"
+      ],
+      "locked": true
+    }
+  ]
+}

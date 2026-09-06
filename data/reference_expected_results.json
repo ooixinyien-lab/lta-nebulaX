@@ -1,0 +1,155 @@
+{
+  "synthetic": true,
+  "purpose": "Test expectations only. Application results must be calculated from input, not hard-coded from this file.",
+  "validation": "Reference fixture checked by an independent Python rule checker and finite enumeration of first-night start/engineer choices; not a CP-SAT implementation or production safety validation.",
+  "requested_plan": [
+    {
+      "request_id": "R01",
+      "start": "2026-09-14T01:00:00+08:00",
+      "end": "2026-09-14T02:20:00+08:00",
+      "engineer_id": "E01",
+      "equipment_ids": [
+        "Q01"
+      ],
+      "locked": true
+    },
+    {
+      "request_id": "R02",
+      "start": "2026-09-14T01:30:00+08:00",
+      "end": "2026-09-14T02:30:00+08:00",
+      "engineer_id": "E02",
+      "equipment_ids": [
+        "Q02"
+      ],
+      "locked": true
+    },
+    {
+      "request_id": "R03",
+      "start": "2026-09-14T01:30:00+08:00",
+      "end": "2026-09-14T02:30:00+08:00",
+      "engineer_id": "E03",
+      "equipment_ids": [
+        "Q03"
+      ],
+      "locked": false
+    },
+    {
+      "request_id": "R04",
+      "start": "2026-09-14T02:00:00+08:00",
+      "end": "2026-09-14T03:15:00+08:00",
+      "engineer_id": "E01",
+      "equipment_ids": [
+        "Q01"
+      ],
+      "locked": false
+    }
+  ],
+  "requested_plan_violations": [
+    {
+      "rule": "DEPENDENCY",
+      "requests": [
+        "R01",
+        "R03"
+      ],
+      "detail": "Predecessor must finish first"
+    },
+    {
+      "rule": "POWER_STATE_OR_GUARD",
+      "requests": [
+        "R01",
+        "R03"
+      ],
+      "detail": "Z01: OFF/ON separation needs 10 min"
+    },
+    {
+      "rule": "RESOURCE_OVERLAP_OR_TRANSFER",
+      "requests": [
+        "R01",
+        "R04"
+      ],
+      "detail": "['E01', 'Q01']: gap -20 min, needs 15 min"
+    },
+    {
+      "rule": "TECHNICIAN_CAPACITY",
+      "requests": [
+        "R01",
+        "R02",
+        "R03",
+        "R04"
+      ],
+      "detail": "2026-09-14T02:00:00+08:00: demand 6, capacity 4"
+    }
+  ],
+  "one_feasible_proposal": [
+    {
+      "request_id": "R01",
+      "start": "2026-09-14T01:00:00+08:00",
+      "end": "2026-09-14T02:20:00+08:00",
+      "engineer_id": "E01",
+      "equipment_ids": [
+        "Q01"
+      ],
+      "locked": true
+    },
+    {
+      "request_id": "R02",
+      "start": "2026-09-14T01:30:00+08:00",
+      "end": "2026-09-14T02:30:00+08:00",
+      "engineer_id": "E02",
+      "equipment_ids": [
+        "Q02"
+      ],
+      "locked": true
+    },
+    {
+      "request_id": "R03",
+      "start": "2026-09-14T02:30:00+08:00",
+      "end": "2026-09-14T03:30:00+08:00",
+      "engineer_id": "E03",
+      "equipment_ids": [
+        "Q03"
+      ],
+      "locked": false
+    },
+    {
+      "request_id": "R04",
+      "start": "2026-09-14T02:35:00+08:00",
+      "end": "2026-09-14T03:50:00+08:00",
+      "engineer_id": "E01",
+      "equipment_ids": [
+        "Q01"
+      ],
+      "locked": false
+    }
+  ],
+  "proposal_violations": [],
+  "changes": [
+    {
+      "request_id": "R03",
+      "preferred": "01:30",
+      "proposed": "02:30",
+      "delay_minutes": 60,
+      "reason": "R01 ends 02:20; Z01 requires the synthetic 10-minute OFF/ON transition guard. Dependency R01 is also satisfied."
+    },
+    {
+      "request_id": "R04",
+      "preferred": "02:00",
+      "proposed": "02:35",
+      "delay_minutes": 35,
+      "reason": "E01 and Q01 finish R01 at 02:20; synthetic inter-site transfer allowance is 15 minutes."
+    }
+  ],
+  "live_change_test": {
+    "event": "E01 unavailable from 02:20 onward on 2026-09-14",
+    "expected_result": "A feasible repair can keep R04 at 02:35-03:50 and assign eligible E04; Q01 still requires its transfer allowance."
+  },
+  "acceptance_tests_to_implement": [
+    "Unknown sector or missing compatibility rule returns REVIEW_REQUIRED, not available.",
+    "A boundary-touching interval is not an overlap; explicit transfer/state guards still apply.",
+    "Proposed allocations do not replace committed allocations until approved and committed.",
+    "Changing any rule, resource or booking invalidates proposals based on an older planning_version.",
+    "The full set of allocations is revalidated before one atomic commit.",
+    "No feasible solution found before a solver timeout is not labelled proven infeasible.",
+    "Movement conflicts need explicit synthetic movement records; do not claim this fixture tests them."
+  ]
+}

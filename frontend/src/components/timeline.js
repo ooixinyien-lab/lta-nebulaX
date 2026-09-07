@@ -38,5 +38,17 @@ export function timeline(state) {
 }
 
 export function corridor(snapshot) {
-  return `<section class="corridor panel"><div class="corridor-label"><strong>Demo corridor</strong><span>Fictional, one direction</span></div><div class="rail-route">${snapshot.sectors.map((s,i)=>`<span class="rail-node">${String.fromCharCode(65+i)}</span><span class="rail-edge"><b>${h(s.id)}</b><small>${h(s.power_zone)}</small></span>`).join('')}<span class="rail-node">G</span></div></section>`;
+  const stations = snapshot.stations || [];
+  const startName = stations[0]?.name || 'Pasir Ris';
+  const endName = stations[stations.length - 1]?.name || 'Eunos';
+  const nodes = stations.length
+    ? stations.map((st) => `<span class="rail-node" title="${h(st.name)} (${h(st.id)})">${h(st.id)}</span>`)
+    : snapshot.sectors.map((s, i) => `<span class="rail-node">${String.fromCharCode(65 + i)}</span>`).concat(['<span class="rail-node">G</span>']);
+
+  const segments = snapshot.sectors.map((s, i) =>
+    `${nodes[i]}<span class="rail-edge"><b>${h(s.id)}</b><small>${h(s.power_zone)}</small></span>`
+  ).join('');
+  const lastNode = nodes[snapshot.sectors.length] || '';
+
+  return `<section class="corridor panel"><div class="corridor-label"><strong>East-West Line (EWL)</strong><span>${h(startName)} to ${h(endName)}</span></div><div class="rail-route">${segments}${lastNode}</div></section>`;
 }

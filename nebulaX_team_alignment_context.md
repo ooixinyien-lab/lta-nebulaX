@@ -474,337 +474,145 @@ severity                 (error | warning)
 
 # 10. Mathematical Scheduling Model
 
-The current optimization direction is a **discrete-time CP-SAT Constraint Satisfaction and Optimization Problem**.
+The formulation is specified in detail in `constraints & LP setup.md`. It is an **integer constraint optimization / CP-SAT scheduling model** operating on a discrete-time horizon:
 
-The planning horizon is modeled in minute-level time steps.
+$$
+\mathcal T=\{0,1,\ldots,T\}
+$$
 
-The current constraints document uses an illustrative engineering window of:
+where each integer step represents 1 minute. For an illustrative engineering window of 01:15 to 04:45, $T = 210$ minutes. With a mandatory handback buffer $B = 20$ minutes, the usable window deadline is:
 
-```text
-01:15 -> 04:45
-210 minutes total
-```
-
-This is a **model assumption from the current constraint specification**, not something we should present as a universal Singapore rail engineering window.
+$$
+T^{use} = T - B = 190 \text{ minutes (04:25)}
+$$
 
 ---
 
 # 11. Sets / Entities in the Optimization Model
 
-The current model includes:
+| Symbol | Entity | Description |
+|---|---|---|
+| $j, k \in \mathcal{J}$ | Work orders | Maintenance requests submitted for execution |
+| $s \in \mathcal{S}$ | Track sectors | Discrete track blocks across the rail corridor |
+| $z \in \mathcal{Z}$ | Power zones | Traction-power feeding sections ($\mathcal{S}_z \subset \mathcal{S}$) |
+| $e \in \mathcal{E}$ | Specialist engineers | Individually tracked and rostered personnel |
+| $q \in \mathcal{K}$ | Competency types | Specialist roles/certifications (e.g., TRACK, SIGNALLING, INSPECTION) |
+| $r \in \mathcal{R}$ | Pooled resources | Fungible capacity (technicians, tamping machines, test kits) |
+| $p \in Pred(j)$ | Prerequisites | Immediate prerequisite work orders required before job $j$ |
+| $b \in \mathcal{B}_s$ | Sector unavailabilities | Confirmed blackout/closure intervals for sector $s$ |
+| $h \in \mathcal{B}_e$ | Engineer unavailabilities | Blocked / absence intervals for engineer $e$ |
+| $v \in \mathcal{V}$ | Engineering vehicles | Heavy vehicles moving between depots and worksites |
 
-- maintenance requests / work orders
-- discrete track sectors
-- traction power zones
-- shared operational resources
-- engineering vehicles
+---
 
-Conceptually:
+# 12. Work Order Attributes & Parameters
+
+For each maintenance request $j \in \mathcal{J}$:
 
 ```text
-Jobs        J
-Sectors     S
-Power Zones Z
-Resources   R
-Vehicles    V
-Blackouts   B
+d_j       Total reserved duration (setup + work + test + handback)
+Omega_j   Total spatial footprint (work sector S_j + safety buffer Buf(j))
+Z_j       Affected traction-power zone(s)
+P_j       Traction power requirement: ON, OFF, or NONE (legacy ANY maps to NONE)
+a_j, b_j  Earliest allowed start and latest allowed finish
+p_j, F_j  Preferred start time and indicator flag (F_j = 1 if preferred time given)
+D_j^allow Deferral eligibility flag (1 = may be deferred; 0 = must run tonight)
+M_j       Service-critical / mandatory flag (1 = hard requirement before next service)
+A_j       Approved booking flag (1 = already approved in previous planning cycle)
+L_j       Frozen booking flag (1 = approved and inside the freeze horizon H^freeze)
+\bar{s}_j Existing approved start time (if A_j = 1)
+U_j       Urgency score for optional non-mandatory work (1–5)
+n_jq      Specialist engineer role slots of competency q required
+c_jr      Quantity of pooled resource r consumed
+Delta_pj  Handover / clearance buffer margin following prerequisite p
 ```
 
 ---
 
-# 12. Work Order Attributes
-
-For each maintenance request `j`, the model currently considers:
-
-```text
-D_j       duration
-
-S_j       work sectors
-
-Buf(j)    safety buffer sectors
-
-Omega_j   total footprint
-           = work sectors + safety buffer
-
-P_j       traction power requirement
-           ON / OFF / NONE (legacy "ANY" maps to "NONE")
-
-W_j       urgency / criticality score (1-10)
-
-c_jr      quantity of resource r consumed (equipment units, pooled technicians)
-
-Pred(j)   prerequisite jobs
-
-Delta_pj  required handover / clearance buffer margin
-```
-
----
-
-# 13. Core Conflict Types / Hard Constraints
-
-## A. Engineering Window / Morning Handback
-
-Every scheduled task must:
-
-- start within the allowed engineering window
-- finish within the window
-- preserve a final clearance / morning sweep buffer
-
-```text
-JOB
-|-----------------------|
-
-Engineering window
-|-----------------------------------|
-
-                             |buffer|
-```
-
----
-
-## B. Spatial Conflict / Safety Buffer
-
-A job does not only occupy its direct work area.
-
-It can also require adjacent protection / buffer sectors.
-
-```text
-          protected footprint
-
-      +-----------------------+
-      |                       |
----- S01 ---- S02 ---- S03 ---- S04 ----
-             ^^^^^
-            work area
-```
-
-If two jobs' protected footprints overlap, they may not be able to run simultaneously.
-
-Current model concept:
-
-```text
-NoOverlap(all jobs occupying the same protected sector)
-```
-
----
-
-## C. Traction Power Compatibility
-
-Two jobs can be in **different physical sectors** but share the same traction power zone.
-
-Example:
-
-```text
-            POWER ZONE Z01
-     +----------------------------+
-
-A ---- S01 ---- B ---- S02 ---- C
-
-R03: S01 requires ON
-R01: S02 requires OFF
-```
-
-Even though the work locations differ:
-
-```text
-ON != OFF
-```
-
-therefore they cannot overlap if they affect the same power zone.
-
----
-
-## D. Engineering Vehicle / Transit Corridor Conflict
-
-Engineering trains or maintenance vehicles may need to travel through sectors to reach worksites.
-
-Therefore:
-
-```text
-worksite available
-```
-
-does **not** automatically mean:
-
-```text
-job executable
-```
-
-The route into or out of the worksite may be blocked.
-
-```text
-Depot ---- S01 ---- S02 ---- S03 ---- Worksite
-
-                    XXXXX
-                another worksite
-
-vehicle cannot reach destination
-```
-
-The current formulation includes transit intervals for engineering vehicles and prevents incompatible overlap with stationary work intervals.
-
-For MVP, if real route data is unavailable, use **explicit synthetic predefined routes**.
-
-Do not infer real authorised engineering routes from MRT station coordinates.
-
----
-
-## E. Manpower and Equipment Capacity
-
-Resource conflicts are not only pairwise.
-
-Example:
-
-```text
-Job A needs 2 technicians
-Job B needs 2 technicians
-Job C needs 2 technicians
-
-Available technicians = 4
-```
-
-Each pair may be feasible.
-
-But:
-
-```text
-A + B + C = 6 > 4
-```
-
-The full schedule is infeasible.
-
-CP-SAT should use **cumulative resource constraints** for these cases.
-
-Resources may include:
-
-- technicians
-- qualified engineers
-- Track Protection Officers
-- engineering trains
-- tamping machines
-- inspection equipment
-- locomotives
-- other shared equipment
-
----
-
-## F. Dependencies / Precedence
-
-Some jobs can only happen after another job is complete.
-
-Example:
-
-```text
-R01 rail repair
-      |
-      v
-R03 signalling verification
-```
-
-Constraint:
-
-```text
-R03 cannot begin before R01 completes
-+ required handover / clearance buffer
-```
-
-If R01 is deferred, R03 may also need to be deferred.
-
----
-
-## G. Blackout Periods / Track Maintenance Freezes
-
-Certain track sectors may be subject to scheduled blackout windows (e.g. system upgrades, third-party infrastructure works, or power isolation testing).
-
-```text
-Track Sector: ---- S01 ---- S02 ---- S03 ---- S04 ----
-Blackout B01:               |==== BLACKOUT ====|
-                             (No work / No transit)
-```
-
-Constraint:
-
-- No maintenance work order ($j \in \mathcal{J}$) whose spatial footprint $\Omega_j$ overlaps the blackout sectors may be scheduled during the blackout window.
-- No engineering vehicle transit interval ($I_{v,s}$) may traverse the blackout sectors during the blackout window.
+# 13. The 9 Real-World Constraints
+
+### 1. Engineering Window & Handback
+Every scheduled job must fit inside the engineering window and complete before the morning handback buffer:
+$$s_j \ge 0, \qquad e_j = s_j + d_j \le T^{use} \quad \forall j \text{ where } y_j = 1$$
+
+### 2. Sector Availability & Safety Footprint
+- **2A. Fixed sector unavailability ($\mathcal{B}_s$):** Scheduled work cannot overlap confirmed blackout/closure intervals in its footprint:
+  $$(e_j \le \alpha_{sb}) \lor (s_j \ge \beta_{sb}) \quad \forall [\alpha_{sb}, \beta_{sb}) \in \mathcal{B}_s, \; s \in \Omega_j$$
+- **2B. Mutually exclusive footprints ($C^{sector}_{jk} = 1$):** Jobs whose protected spatial footprints overlap cannot run concurrently:
+  $$(e_j \le s_k) \lor (e_k \le s_j)$$
+
+### 3. Work & Traction-Power Compatibility
+Concurrent jobs must satisfy compatibility rules. If jobs require opposing power (`ON` vs `OFF`) in a shared zone ($C^{power}_{jk}=1$) or are work-incompatible ($C^{work}_{jk}=1$), they must be separated by transition guard $g_{jk}$:
+$$(e_j + g_{jk} \le s_k) \lor (e_k + g_{kj} \le s_j)$$
+
+### 4. Resource Requirements, Qualification & Capacity
+- **4A. Specialist engineers ($e \in \mathcal{E}, q \in \mathcal{K}$):** Every job receives its required qualified specialists ($x_{jeq} \le Q_{eq}$); engineers cannot be double-booked ($\text{NoOverlap}(\{I_{je}\})$) or assigned during unavailability $\mathcal{B}_e$.
+- **4B. Pooled manpower & equipment ($r \in \mathcal{R}$):** Concurrent demand across active jobs cannot exceed fleet/pool capacity $C_r$ ($\text{Cumulative}(\{I_j\}, \{c_{jr}\}, C_r)$).
+
+### 5. Resource Transfer / Travel Time
+A specialist engineer or individually tracked vehicle/equipment assigned to consecutive jobs $j$ and $k$ must have sufficient time to travel between locations:
+$$(e_j + \tau^E_{e,jk} \le s_k) \lor (e_k + \tau^E_{e,kj} \le s_j)$$
+
+### 6. Dependencies & Required Sequence
+For every prerequisite $p \in Pred(j)$, a dependent job cannot proceed if its prerequisite is deferred ($y_j \le y_p$), and must observe the clearance buffer:
+$$s_j \ge e_p + \Delta_{pj}$$
+
+### 7. Booking Commitment & Freeze Horizon
+- Approved jobs remain scheduled: $A_j = 1 \implies y_j = 1$.
+- Frozen jobs within freeze horizon $H^{freeze}$ cannot move: $L_j = 1 \implies s_j = \bar{s}_j$.
+- Approved non-frozen jobs ($A_j = 1, L_j = 0$) may move only if necessary, with movements tracked via binary indicator $m_j \in \{0, 1\}$.
+
+### 8. Request Timing Flexibility & Deferral Eligibility
+Handles `EXACT` slot ($a_j = p_j, b_j = p_j + d_j$), `RANGE` ($a_j \le s_j, e_j \le b_j$), and `ANY_TIME` ($a_j = 0, b_j = T^{use}$). If $D_j^{allow} = 0$, deferral is barred ($y_j = 1$).
+
+### 9. Service-Critical / Mandatory Work
+If $M_j = 1$, then $y_j = 1$ is an unyielding hard rule. The solver cannot resolve a conflict by dropping safety-critical work. If an impasse occurs with a frozen booking, the system raises an **escalation alert**.
 
 ---
 
 # 14. Decision Variables
 
-Current CP-SAT formulation includes:
-
 ```text
-y_j
-whether job j is scheduled tonight
-
-start_j
-job start time
-
-end_j
-job completion time
-
-I_j
-job interval
-
-I_v,s
-engineering vehicle transit interval
-```
-
-Future / extended model can also include:
-
-```text
-engineer assignment
-equipment assignment
-night/date assignment
-approved execution mode
+y_j \in {0, 1}          1 if job j is scheduled tonight; 0 if deferred
+s_j, e_j \in Z_{>=0}    Start and completion minute (e_j = s_j + d_j)
+I_j                     Optional interval variable [s_j, d_j, e_j] active if y_j = 1
+x_jeq \in {0, 1}        Assignment of engineer e to competency role q on job j
+I_je                    Optional engineer assignment interval
+m_j \in {0, 1}          1 if approved start time \bar{s}_j was moved; 0 if preserved
+\delta_j >= 0           Absolute deviation from preferred start |s_j - p_j|
+C_max >= 0              Latest completion time among scheduled jobs
+I_{v,s}                 Transit corridor interval for vehicle v through sector s
 ```
 
 ---
 
-# 15. Optimization Objective
+# 15. Lexicographic Optimization Objectives
 
-Current objective direction:
-
-## Primary goal
-
-Schedule **high-priority / high-criticality work** where possible.
-
-## Secondary goals
-
-- finish jobs earlier
-- preserve handback margin
-- reduce unnecessary vehicle transit
-- minimize unnecessary schedule changes
-- minimize deviation from preferred time
-- minimize engineer reassignment
-- minimize low-value deferrals
-
-Conceptually:
+Rather than arbitrary weighting, the engine solves using **lexicographic stages**:
 
 ```text
-MAXIMIZE
-maintenance value completed
-
-MINIMIZE
-delay
-schedule disruption
-resource friction
-deadhead travel
+STAGE 0: ALL 9 HARD CONSTRAINTS SATISFIED
+             ↓
+STAGE 1: MINIMIZE APPROVED JOBS MOVED
+         min \sum_{j: A_j=1, L_j=0} m_j
+             ↓
+STAGE 2: MAXIMIZE OPTIONAL URGENCY COMPLETED
+         max \sum_j U_j y_j
+             ↓
+STAGE 3: MINIMIZE PREFERRED-TIME DEVIATION
+         min \sum_j F_j \delta_j
+             ↓
+STAGE 4: PRESERVE SPARE HANDBACK MARGIN
+         min C_max  (maximizes Slack = T^use - C_max)
 ```
 
-Prefer strict objective ordering where possible:
-
-1. satisfy all hard constraints
-2. preserve mandatory work
-3. maximize high-priority work
-4. minimize changes to existing allocations
-5. minimize deviation from requested time
+Schedule stability takes precedence over optional work urgency.
 
 ---
 
-# 16. Infeasibility / Alternative Generation
+# 16. Infeasibility & Alternative Generation
 
-If all requests cannot fit, the system should **not silently force them into the schedule**.
+When constraints make scheduling all work orders mathematically infeasible, the engine does **not** silently drop mandatory work.
 
 Instead:
 
@@ -812,63 +620,24 @@ Instead:
 NO FEASIBLE PLAN
       |
       v
-identify conflicting constraints / requests
+Identify conflicting constraints & work orders
       |
       v
-generate alternative repairs
+Generate explainable repair alternatives
 ```
 
 Possible repairs:
-
-## Alternative A — Temporal Shift
-
-Move a job later / earlier.
-
-```text
-Requested
-01:30 -------- 02:30
-
-Suggested
-         02:30 -------- 03:30
-```
-
-## Alternative B — Different Engineer
-
-Where another engineer has the required qualification.
-
-## Alternative C — Different Equipment
-
-Where an equivalent serviceable unit exists.
-
-## Alternative D — Change Sequence
-
-Run one task before another.
-
-## Alternative E — Defer Lower-Priority Job
-
-Move a lower-criticality task to the next allowed night.
-
-## Alternative F — Shared / Bundled Window
-
-Potential future feature.
-
-Compatible jobs may be grouped under one coordinated access arrangement, **only if explicitly allowed by the planning rules**.
+- **Alternative A (Temporal Shift):** Move non-frozen jobs earlier/later within allowed engineering hours.
+- **Alternative B (Specialist Reassignment):** Assign another qualified engineer who possesses competency $q$.
+- **Alternative C (Equipment Substitution):** Reassign an equivalent serviceable equipment unit.
+- **Alternative D (Sequence Inversion):** Invert execution order between non-dependent tasks.
+- **Alternative E (Opportunistic Deferral):** Defer non-mandatory jobs ($D_j^{allow} = 1$) with lower urgency scores $U_j$.
 
 ---
 
-# 17. Important Caveat About "MUS"
+# 17. Infeasibility Explanation Note
 
-The current constraints document proposes identifying a **Minimal Unsatisfiable Subset (MUS)**.
-
-For implementation, be careful with this wording.
-
-A practical first version can:
-
-- identify a small or sufficient conflicting subset
-- show which requests and constraints make the plan infeasible
-- generate repair scenarios
-
-Do not claim the tool mathematically guarantees the **smallest possible** root-cause subset unless that behavior is explicitly implemented and verified.
+When explaining infeasibilities, provide the exact conflicting work orders, sectors, resources, or frozen bookings. Avoid asserting mathematical minimality ("Minimal Unsatisfiable Subset" / MUS) unless an explicit minimal-cardinality extraction algorithm has run.
 
 ---
 
@@ -1482,6 +1251,7 @@ Only after that should we add more advanced AI or integration features.
 
 # 33. Constraint Specification Source Note
 
-The current mathematical formulation used by the team defines a minute-level discrete planning horizon, explicit sectors, traction power zones, shared resources, engineering vehicles, optional scheduling variables, safety-buffer footprints, power compatibility, vehicle-transit interlocking, cumulative resource capacity, work-order dependencies, and a multi-objective scheduling direction.
+The current mathematical formulation used by the team is defined in `constraints & LP setup.md`. It specifies a minute-level discrete planning horizon, handback buffer protection, the 9 real-world hard constraints (engineering window, sector availability/unavailability, work/power compatibility, specialist engineer competencies and pooled resource capacities, transfer travel times, dependencies, booking commitments/freeze horizon, timing flexibility/deferral, and mandatory work), alongside lexicographic optimization stages.
 
-This alignment note preserves that structure but translates it into implementation and product language for the whole team.
+This alignment note translates that mathematical model into implementation, data classes (`backend/app/models.py`), and product architecture for the whole team.
+

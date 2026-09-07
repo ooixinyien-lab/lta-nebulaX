@@ -54,7 +54,7 @@ Do not send `owner_id`, `role`, `status`, `eligible_engineers`, `power_zone` or 
 
 The work sector must be included in the protection footprint. Times must include a timezone. Existing referenced IDs must be valid. Date choices must come from the seeded calendar. New requester-defined dependencies can refer to their own active requests. The initial operator-style fixture has a cross-team dependency created by seed data.
 
-`power_requirement` accepts `"ON"`, `"OFF"`, or `"NONE"`. (Legacy input `"ANY"` is automatically normalized to `"NONE"` for backward compatibility).
+`power_requirement` accepts `"ON"`, `"OFF"`, or `"NONE"`. (Legacy input `"ANY"` is automatically normalized to `"NONE"` for backward compatibility). Requests also support `timing_mode` (`"EXACT"`, `"RANGE"`, `"ANY_TIME"`) and deferral eligibility `deferrable: bool` ($D_j^{allow}$).
 
 The API can accept a request whose desired time conflicts. That is the point of the request queue; schema validation is not the same as allocating a feasible slot.
 
@@ -73,17 +73,19 @@ The API can accept a request whose desired time conflicts. That is the point of 
 }
 ```
 
-Codes identify modelled violations:
-- `SPACE`: Exclusive protected footprints overlap.
-- `POWER`: Incompatible power requirements (`ON` vs `OFF`) in a shared power feeding section ($z \in \mathcal{Z}$).
-- `ENGINEER`: Qualified lead engineer double-booked or lacks inter-site transfer allowance.
-- `EQUIPMENT`: Assigned equipment double-booked or lacks inter-site transfer allowance.
-- `DEPENDENCY`: Predecessor task incomplete or handover clearance buffer ($\Delta_{p,j}$) violated.
-- `MANPOWER`: Concurrent technician demand exceeds pool capacity ($C_{\text{TECH}}$).
-- `ENGINEERING_WINDOW`: Work package exceeds allowed sector window or morning sweep protection ($T_{\text{buffer}}$).
-- `BLACKOUT`: Work package or vehicle transit intersects scheduled blackout closure ($b \in \mathcal{B}$).
-- `VEHICLE_TRANSIT`: Engineering vehicle transit corridor blocked or conflicts with stationary worksite.
-- `LOCKED_BOOKING`: Attempted modification to a locked historical booking.
+Codes identify modelled violations of the 9 hard constraints:
+- `ENGINEERING_WINDOW`: Work package exceeds allowed sector engineering window or morning handback buffer ($B$).
+- `SPACE`: Exclusive protected footprints overlap ($C^{sector}_{jk} = 1$).
+- `BLACKOUT`: Work package or vehicle transit intersects confirmed sector unavailability ($\mathcal{B}_s$).
+- `POWER`: Incompatible traction power requirements (`ON` vs `OFF`) in a shared feeding zone ($C^{power}_{jk}=1$).
+- `WORK_COMPATIBILITY`: Concurrent activities violate operational compatibility rules ($C^{work}_{jk}=1$).
+- `ENGINEER`: Specialist engineer double-booked, lacking required competency qualification ($Q_{eq}$), or unavailable ($\mathcal{B}_e$).
+- `MANPOWER`: Concurrent technician / pooled demand exceeds pool capacity ($C_r$).
+- `EQUIPMENT`: Assigned equipment double-booked or unavailable.
+- `TRANSFER_TIME`: Specialist engineer, vehicle, or equipment lacks required travel time ($\tau^E_{jk}$) between consecutive jobs.
+- `DEPENDENCY`: Predecessor task incomplete or handover clearance buffer ($\Delta_{pj}$) violated.
+- `LOCKED_BOOKING`: Attempted modification to a frozen approved booking inside freeze horizon ($H^{freeze}$).
+- `MANDATORY_DROPPED`: Service-critical mandatory work ($M_j = 1$) omitted or deferred.
 - `REVIEW_REQUIRED`: Undefined rule or missing compatibility specification.
 
 The message is generated from rules/data, not an LLM.

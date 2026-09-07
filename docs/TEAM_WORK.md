@@ -12,7 +12,7 @@ The current frontend is intentionally native JavaScript, not React. Decide once,
 
 | Stream | Owned files | First useful task | Definition of done |
 |---|---|---|---|
-| Data / domain model | `backend/app/models.py`, `data/demo_data.json` | Maintain typed Pydantic models for CP-SAT entities, blackouts, vehicles, rules | Fixture passes validation; round-trip serialization works; backward compatibility intact |
+| Data / domain model | `backend/app/models.py`, `data/demo_data.json`, `constraints & LP setup.md` | Maintain typed Pydantic models for the 9 hard constraints, master data, vehicles, rules | Fixture passes validation; round-trip serialization works; backward compatibility intact |
 | Frontend | `frontend/src/pages/`, `components/`, `styles.css` | Improve request feedback and make protection vs work location unmistakable | Submitted data persists; rendered fields match the API; no scheduling rules hidden in UI |
 | Backend/rules | `backend/app/api/routes.py`, `database.py`, `services/checker.py` | Add well-defined work-compatibility rules and clear errors | Tests demonstrate allowed AND forbidden cases; revision bumps and ownership still work |
 | Optimisation | `services/cp_sat.py`, `candidates.py`, `scheduler.py`, `test_scheduler.py` | Install OR-Tools, run seven CP-SAT tests, then compare against demo search | Feasible outputs pass the checker; status/objective meanings are documented |

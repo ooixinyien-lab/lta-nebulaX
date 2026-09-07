@@ -22,43 +22,51 @@ Both solve a finite five-minute start-time model. `OPTIMAL` means optimal under 
 
 ### Variables
 
-For each active request $j \in \mathcal{J}$:
+The full integer formulation chooses $\{y_j, s_j, e_j, x_{jeq}, m_j, \delta_j\}$:
 
-- integer start and end minutes ($start_j, end_j$) measured from the first seeded engineering window;
-- a lead-engineer index;
-- a fixed-duration interval ($I_j$) equal to setup + work + test + handback ($D_j$).
+- $y_j \in \{0, 1\}$: Binary task acceptance variable ($1 = \text{scheduled tonight}, 0 = \text{deferred}$).
+- $s_j, e_j \in [0, T^{use}]$: Start and completion minute ($e_j = s_j + d_j$).
+- $I_j$: Optional interval variable defined over $[s_j, d_j, e_j]$ guarded by $y_j = 1$.
+- $x_{jeq} \in \{0, 1\}$: Assignment of specialist engineer $e$ to competency role $q$ on job $j$.
+- $m_j \in \{0, 1\}$: Movement indicator for approved jobs outside freeze horizon ($1 = \text{moved from } \bar{s}_j$).
+- $\delta_j \ge |s_j - p_j|$: Absolute deviation from preferred start minute.
+- $C_{\max} \ge e_j$: Latest completion minute across scheduled work orders.
+- $I_{v,s}$: Optional transit corridor interval for engineering vehicle $v \in \mathcal{V}$ across sector $s$ with duration $\tau_{v,s}$.
 
-For engineering vehicles $v \in \mathcal{V}$:
-- transit intervals $I_{v,s} = \text{IntervalVar}(start_{v,s}, \tau_{v,s}, end_{v,s})$ representing dynamic sector occupancy along predefined depot corridors.
+All domain entities are typed and validated via `backend/app/models.py`.
 
-For a new request, `candidates.py` enumerates start/engineer pairs satisfying individual window, blackout, skill, equipment serviceability and resource-availability checks. These form an allowed-assignment table. Already committed requests get one fixed candidate. All entities are typed and validated via `backend/app/models.py`.
+### The 9 Hard Constraints
 
-### Constraints
+1. **Engineering Window & Handback:** $s_j \ge 0$, $e_j \le T^{use} = T - B$ (where $B$ is the handback buffer, e.g. 20 min).
+2. **Sector Availability & Safety Footprint:**
+   - Fixed sector unavailabilities ($\mathcal{B}_s$): $y_j = 1 \implies (e_j \le \alpha_{sb}) \lor (s_j \ge \beta_{sb})$.
+   - Mutually exclusive protected footprints ($C^{sector}_{jk} = 1$): $(e_j \le s_k) \lor (e_k \le s_j)$.
+3. **Work & Traction-Power Compatibility:** Opposing traction power (`ON` vs `OFF`) in common feeding zones ($C^{power}_{jk}=1$) or work incompatibilities ($C^{work}_{jk}=1$) require transition separation $g_{jk}$: $(e_j + g_{jk} \le s_k) \lor (e_k + g_{kj} \le s_j)$. Tasks requiring `NONE` are electrically neutral.
+4. **Resource Requirements, Qualification & Capacity:**
+   - Specialist engineers: $\sum_e x_{jeq} = n_{jq} y_j$, $x_{jeq} \le Q_{eq}$, $\text{NoOverlap}(\{I_{je}\})$, and no overlap with engineer absence windows $\mathcal{B}_e$.
+   - Pooled manpower & equipment: $\text{Cumulative}(\{I_j\}, \{c_{jr}\}, C_r)$ ensures demand at minute $t$ never exceeds capacity $C_r$.
+5. **Resource Transfer / Travel Time:** Assigned engineers/equipment moving between consecutive jobs must observe inter-site travel times: $(e_j + \tau^E_{jk} \le s_k) \lor (e_k + \tau^E_{kj} \le s_j)$.
+6. **Dependencies & Required Sequence:** Prerequisite enforcement $y_j \le y_p$ and handover clearance margin $s_j \ge e_p + \Delta_{pj}$ for all $p \in Pred(j)$.
+7. **Booking Commitment & Freeze Horizon:** Approved jobs remain scheduled ($A_j = 1 \implies y_j = 1$); frozen jobs within $H^{freeze}$ cannot move ($L_j = 1 \implies s_j = \bar{s}_j$); approved non-frozen jobs may move only if necessary ($m_j = 1$).
+8. **Request Timing Flexibility & Deferral Eligibility:** Accommodates `EXACT`, `RANGE`, and `ANY_TIME` modes. Non-deferrable work enforces $D_j^{allow} = 0 \implies y_j = 1$.
+9. **Service-Critical / Mandatory Work:** Hard rule $M_j = 1 \implies y_j = 1$. Solver may never drop safety-critical repairs to resolve conflicts.
 
-- All active requests are assigned exactly once; there is no optional/urgency logic yet.
-- Existing commitments are fixed ($y_{\text{fixed}} = 1$).
-- Exclusive protected footprints cannot overlap: $\text{NoOverlap}(\{I_j \mid s \in \Omega_j\})$.
-- Traction power sector compatibility: opposed power states (`ON` vs `OFF`) in any shared affected zone ($z \in \mathcal{Z}$) require the synthetic transition guard; tasks with `NONE` require no isolation.
-- Blackout & track closure exclusions: no task or vehicle transit may intersect an active blackout period ($b \in \mathcal{B}$) in its sectors.
-- Vehicle transit corridor interlocking: transit intervals and stationary worksites in sector $s$ are mutually exclusive: $\text{NoOverlap}(\{I_{v,s}\} \cup \{I_j\})$.
-- Morning sweep revenue protection: tasks must finish before window close minus $T_{\text{buffer}}$ (e.g. 20 minutes).
-- Assignments sharing a lead engineer or equipment must be separated, including the flat inter-site transfer gap when their work sectors differ.
-- Predecessors must end before dependent jobs start, plus required handover buffer: $start_j \ge end_p + \Delta_{p,j}$.
-- A cumulative constraint limits simultaneous general-technician demand to pool capacity ($C_{\text{TECH}}$).
-- All job phases share the package's resources and power requirement in this starter.
+### Lexicographic Objective Architecture
 
-Resource transfer is a simple pairwise separation assumption, not a route model. The first arrival is assumed reachable. Technician travel is not represented. Equipment IDs are required physical units, not a flexible choice among equipment types.
+The formulation recommends solving in **strict lexicographic priority stages**:
 
-### Objective
+1. **Stage 0:** Satisfy all 9 hard constraints.
+2. **Stage 1 (Schedule Stability):** $\min \sum_{j: A_j=1, L_j=0} m_j$ (minimize disturbance to approved bookings).
+3. **Stage 2 (Optional Urgency):** $\max \sum_j U_j y_j$ (maximize completed non-mandatory work weighted by urgency $U_j \in [1, 5]$).
+4. **Stage 3 (Requester Preferences):** $\min \sum_j F_j \delta_j$ (minimize total absolute deviation from preferred times).
+5. **Stage 4 (Handback Margin):** $\min C_{\max}$ (maximize spare margin $\text{Slack} = T^{use} - C_{\max}$).
 
-For pending requests, minimise:
+The starter implementation aggregates priority terms into a weighted single-solve objective:
 
 ```text
 (number_of_active_jobs + 1) * total_absolute_start_deviation_minutes
   + count_of_nonpreferred_engineer_assignments
 ```
-
-The coefficient ensures that one minute of total time deviation dominates every possible engineer-preference penalty in this small model. This is deliberate priority ordering, not an estimate of money or safety risk.
 
 The initial fixture produces a total weighted objective of 475 with R03 at 02:30 and R04 at 02:35 using E01. The reference JSON is not imported by either solver.
 

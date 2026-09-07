@@ -54,6 +54,8 @@ Do not send `owner_id`, `role`, `status`, `eligible_engineers`, `power_zone` or 
 
 The work sector must be included in the protection footprint. Times must include a timezone. Existing referenced IDs must be valid. Date choices must come from the seeded calendar. New requester-defined dependencies can refer to their own active requests. The initial operator-style fixture has a cross-team dependency created by seed data.
 
+`power_requirement` accepts `"ON"`, `"OFF"`, or `"NONE"`. (Legacy input `"ANY"` is automatically normalized to `"NONE"` for backward compatibility).
+
 The API can accept a request whose desired time conflicts. That is the point of the request queue; schema validation is not the same as allocating a feasible slot.
 
 ## Conflict shape
@@ -71,7 +73,20 @@ The API can accept a request whose desired time conflicts. That is the point of 
 }
 ```
 
-Codes identify modelled violations. `REVIEW_REQUIRED` is used when a required rule is absent. The message is generated from rules/data, not an LLM.
+Codes identify modelled violations:
+- `SPACE`: Exclusive protected footprints overlap.
+- `POWER`: Incompatible power requirements (`ON` vs `OFF`) in a shared power feeding section ($z \in \mathcal{Z}$).
+- `ENGINEER`: Qualified lead engineer double-booked or lacks inter-site transfer allowance.
+- `EQUIPMENT`: Assigned equipment double-booked or lacks inter-site transfer allowance.
+- `DEPENDENCY`: Predecessor task incomplete or handover clearance buffer ($\Delta_{p,j}$) violated.
+- `MANPOWER`: Concurrent technician demand exceeds pool capacity ($C_{\text{TECH}}$).
+- `ENGINEERING_WINDOW`: Work package exceeds allowed sector window or morning sweep protection ($T_{\text{buffer}}$).
+- `BLACKOUT`: Work package or vehicle transit intersects scheduled blackout closure ($b \in \mathcal{B}$).
+- `VEHICLE_TRANSIT`: Engineering vehicle transit corridor blocked or conflicts with stationary worksite.
+- `LOCKED_BOOKING`: Attempted modification to a locked historical booking.
+- `REVIEW_REQUIRED`: Undefined rule or missing compatibility specification.
+
+The message is generated from rules/data, not an LLM.
 
 ## Proposal shape
 
@@ -130,6 +145,23 @@ For equipment serviceability:
 ```json
 {"kind": "equipment", "id": "Q01", "serviceable": false}
 ```
+
+## Planning Snapshot and Domain Model
+
+The full planning state returned by `GET /planning-snapshot` is typed and validated by `PlanningSnapshot` in `backend/app/models.py`. It unifies:
+
+- `metadata`: Schema version, revision counter, timezone, and scope.
+- `stations`: Physical station nodes ($N01 \dots N07$).
+- `sectors`: Directed track sectors ($S01 \dots S06$), power zone mapping, and exclusive protection flags.
+- `engineering_windows`: Calendar date boundaries and open sector windows.
+- `blackouts`: Scheduled maintenance freezes and third-party restrictions ($b \in \mathcal{B}$).
+- `planning_rules`: Minute grid, transfer allowances, power transition guards, and morning buffer ($T_{\text{buffer}}$).
+- `engineers`: Personnel qualification, skills, and availability windows.
+- `equipment`: Physical equipment capacity, serviceability, and availability.
+- `resource_pools`: Cumulative shared resources ($C_r$, e.g. general technicians `TECH`).
+- `requests`: All submitted and scheduled maintenance work orders ($j \in \mathcal{J}$).
+- `committed_allocations`: Historic, locked bookings.
+- `vehicles`: Engineering vehicle fleet ($\mathcal{V}$) and predefined transit corridors.
 
 ## Error handling
 

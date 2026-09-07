@@ -12,16 +12,17 @@ The current frontend is intentionally native JavaScript, not React. Decide once,
 
 | Stream | Owned files | First useful task | Definition of done |
 |---|---|---|---|
+| Data / domain model | `backend/app/models.py`, `data/demo_data.json` | Maintain typed Pydantic models for CP-SAT entities, blackouts, vehicles, rules | Fixture passes validation; round-trip serialization works; backward compatibility intact |
 | Frontend | `frontend/src/pages/`, `components/`, `styles.css` | Improve request feedback and make protection vs work location unmistakable | Submitted data persists; rendered fields match the API; no scheduling rules hidden in UI |
 | Backend/rules | `backend/app/api/routes.py`, `database.py`, `services/checker.py` | Add well-defined work-compatibility rules and clear errors | Tests demonstrate allowed AND forbidden cases; revision bumps and ownership still work |
 | Optimisation | `services/cp_sat.py`, `candidates.py`, `scheduler.py`, `test_scheduler.py` | Install OR-Tools, run seven CP-SAT tests, then compare against demo search | Feasible outputs pass the checker; status/objective meanings are documented |
 | Auth/integration/testing | `backend/app/auth/`, `frontend/src/auth/`, CI and auth tests | Enable a real Supabase test project with two requester users and one officer | Real requester cannot call officer endpoints; no secret key reaches the browser |
 
-With a fifth person, split requester and officer frontend files. With three people, combine auth with backend, and give browser QA to the frontend owner.
+With five people, split data modeling and frontend streams. With three people, combine auth with backend, and give browser QA to the frontend owner.
 
 ### Shared files that need coordination
 
-`backend/app/schemas.py`, `frontend/src/app.js`, `frontend/src/lib/api.js`, `data/demo_data.json`, the dependency files and `.env.example` affect several streams. Assign one integrator or announce edits before changing them. The API guide is the contract; do not silently rename fields.
+`backend/app/models.py`, `backend/app/schemas.py`, `frontend/src/app.js`, `frontend/src/lib/api.js`, `data/demo_data.json`, the dependency files and `.env.example` affect several streams. Assign one integrator or announce edits before changing them. The API guide is the contract; do not silently rename fields.
 
 Keep the current fixture as a baseline. Put additional scenarios in new files/tests rather than changing every existing test to match a new answer.
 

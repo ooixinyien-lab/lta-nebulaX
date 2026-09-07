@@ -69,6 +69,7 @@ The fixture calendar is **14-20 September 2026**, not today's live railway calen
 
 | Workstream | Main files | What that person owns |
 |---|---|---|
+| Data / domain model | `backend/app/models.py`, `data/demo_data.json` | Typed Pydantic v2 domain models (CP-SAT formulation, vehicles, blackouts, rules, snapshots) |
 | Requester frontend | `frontend/src/pages/requester.js` | Form, request list, status and validation presentation |
 | Officer frontend | `frontend/src/pages/officer.js`, `frontend/src/components/` | Timeline, conflict panel, proposal review, resource UI |
 | Backend / rules | `backend/app/api/routes.py`, `database.py`, `services/checker.py` | APIs, persistence, permissions at routes, conflict rules, atomic publication |
@@ -137,6 +138,7 @@ railplan-starter/
       main.py                  FastAPI app and static website serving
       config.py                configuration and demo identities
       schemas.py               validated request shapes
+      models.py                typed domain data classes (CP-SAT formulation, vehicles, blackouts, rules)
       database.py              SQLite repository
       auth/dependencies.py     verified identity and server-owned role
       api/routes.py            API endpoints
@@ -192,9 +194,11 @@ Read [docs/SUPABASE.md](docs/SUPABASE.md). It covers project configuration, offi
 
 **Working in the tested demo:** separate role views; ownership filtering; request submission/withdrawal; persistent records; real rule checking; a real small-demo search; proposal preview; single-officer approval/publication; revision-based stale-plan rejection; atomic writes; resource updates; demo reset; audit records.
 
+**Domain model and data classes (implemented in `backend/app/models.py`):** Typed Pydantic v2 data classes covering all mathematical entities from `constraints.md`: maintenance work orders (with $P_j \in \{\text{OFF}, \text{ON}, \text{NONE}\}$, $\Delta_{p,j}$, $W_j$), track sectors, stations, traction power zones, engineering windows, blackout closures ($\mathcal{B}$), shared cumulative resource pools, named engineers/equipment, engineering vehicles ($\mathcal{V}$), transit corridors ($I_{v,s}$, $\tau_{v,s}$), planning rules ($T_{\text{buffer}}$), conflicts, and unified planning snapshots.
+
 **Implemented but not executed against the real service/dependency in the build environment:** the CP-SAT model, and real Supabase sign-in/identity verification. Their tests/configuration are included. See the test report.
 
-**Not implemented yet:** multiple distinct alternatives in one solve; movable approved bookings; optional/urgent work prioritisation; a general operator work-compatibility matrix beyond exclusive footprints and power rules; engineering-vehicle routes; phase-specific resource/power states; shared possessions; automatic requester approvals; actual TAMS/MOMS integrations; live updates without refresh; notifications; production deployment hardening.
+**Not implemented in solver engine yet:** solver-side vehicle route scheduling; multiple distinct alternatives in one solve; movable approved bookings; optional/urgent work prioritisation; a general operator work-compatibility matrix beyond exclusive footprints and power rules; phase-specific resource/power states; shared possessions; automatic requester approvals; actual TAMS/MOMS integrations; live updates without refresh; notifications; production deployment hardening.
 
 All jobs are complete, unsplittable work packages. One lead engineer and the specified equipment are reserved for the entire package. The technician pool is interchangeable capacity, not individually routed people. The first resource arrival is assumed possible. A flat 15-minute inter-site transfer and 10-minute opposed-power guard are fictional examples, not operating instructions.
 

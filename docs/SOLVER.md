@@ -22,23 +22,29 @@ Both solve a finite five-minute start-time model. `OPTIMAL` means optimal under 
 
 ### Variables
 
-For each active request:
+For each active request $j \in \mathcal{J}$:
 
-- integer start and end minutes measured from the first seeded engineering window;
+- integer start and end minutes ($start_j, end_j$) measured from the first seeded engineering window;
 - a lead-engineer index;
-- a fixed-duration interval equal to setup + work + test + handback.
+- a fixed-duration interval ($I_j$) equal to setup + work + test + handback ($D_j$).
 
-For a new request, `candidates.py` enumerates start/engineer pairs satisfying individual window, blackout, skill, equipment serviceability and resource-availability checks. These form an allowed-assignment table. Already committed requests get one fixed candidate.
+For engineering vehicles $v \in \mathcal{V}$:
+- transit intervals $I_{v,s} = \text{IntervalVar}(start_{v,s}, \tau_{v,s}, end_{v,s})$ representing dynamic sector occupancy along predefined depot corridors.
+
+For a new request, `candidates.py` enumerates start/engineer pairs satisfying individual window, blackout, skill, equipment serviceability and resource-availability checks. These form an allowed-assignment table. Already committed requests get one fixed candidate. All entities are typed and validated via `backend/app/models.py`.
 
 ### Constraints
 
 - All active requests are assigned exactly once; there is no optional/urgency logic yet.
-- Existing commitments are fixed.
-- Exclusive protected footprints cannot overlap.
-- Opposed power states in any shared affected zone need the synthetic transition guard.
+- Existing commitments are fixed ($y_{\text{fixed}} = 1$).
+- Exclusive protected footprints cannot overlap: $\text{NoOverlap}(\{I_j \mid s \in \Omega_j\})$.
+- Traction power sector compatibility: opposed power states (`ON` vs `OFF`) in any shared affected zone ($z \in \mathcal{Z}$) require the synthetic transition guard; tasks with `NONE` require no isolation.
+- Blackout & track closure exclusions: no task or vehicle transit may intersect an active blackout period ($b \in \mathcal{B}$) in its sectors.
+- Vehicle transit corridor interlocking: transit intervals and stationary worksites in sector $s$ are mutually exclusive: $\text{NoOverlap}(\{I_{v,s}\} \cup \{I_j\})$.
+- Morning sweep revenue protection: tasks must finish before window close minus $T_{\text{buffer}}$ (e.g. 20 minutes).
 - Assignments sharing a lead engineer or equipment must be separated, including the flat inter-site transfer gap when their work sectors differ.
-- Predecessors must end before their dependent jobs start.
-- A cumulative constraint limits simultaneous general-technician demand.
+- Predecessors must end before dependent jobs start, plus required handover buffer: $start_j \ge end_p + \Delta_{p,j}$.
+- A cumulative constraint limits simultaneous general-technician demand to pool capacity ($C_{\text{TECH}}$).
 - All job phases share the package's resources and power requirement in this starter.
 
 Resource transfer is a simple pairwise separation assumption, not a route model. The first arrival is assumed reachable. Technician travel is not represented. Equipment IDs are required physical units, not a flexible choice among equipment types.
@@ -64,7 +70,7 @@ The initial fixture produces a total weighted objective of 475 with R03 at 02:30
 4. Generate two or three meaningfully distinct alternatives; do not repeatedly return the same assignment with a different ID.
 5. Add explicit optional/priority handling only after agreeing the policy with the team. Infeasible mandatory work must not disappear silently.
 
-Later extensions include movable approved allocations with disruption penalties, richer resource assignments, operator-supplied compatibility rules and route reservations. Do not add a shortest-path route and claim it is authorised railway access.
+Later extensions include solver-side transit corridor scheduling, movable approved allocations with disruption penalties, richer resource assignments, operator-supplied compatibility rules and route reservations. Do not add a shortest-path route and claim it is authorised railway access.
 
 ## Status discipline
 

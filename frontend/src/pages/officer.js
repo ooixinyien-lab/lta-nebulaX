@@ -1,5 +1,5 @@
 import { h, time, badge, duration } from '../lib/format.js';
-import { timeline, weekOverview } from '../components/timeline.js?v=20260910q';
+import { timeline, weekOverview } from '../components/timeline.js?v=20260910-demo2';
 
 function requestPool(state){
   const scheduled=new Set((state.manualPlan||[]).map(a=>a.request_id));

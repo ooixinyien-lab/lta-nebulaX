@@ -4,7 +4,7 @@
     "planning_version": 1,
     "timezone": "Asia/Singapore",
     "synthetic": true,
-    "description": "Fictional single-direction railway corridor for a hackathon prototype.",
+    "description": "East-West Line (EWL) corridor (EW1 Pasir Ris to EW7 Eunos) for prototype demonstration.",
     "disclaimer": "NOT LTA, SMRT or SBS Transit operational data. All locations, rules, timings, skills and bookings are invented. Model-feasible does not mean authorised or operationally safe.",
     "scope": "Four-request teaching fixture, not a full railway model. No live interfaces. No production authentication. No executable railway controls.",
     "simplifications": [
@@ -21,87 +21,87 @@
   },
   "stations": [
     {
-      "id": "N01",
-      "name": "Demo Station A",
+      "id": "EW1",
+      "name": "Pasir Ris",
       "schematic_x": 0
     },
     {
-      "id": "N02",
-      "name": "Demo Station B",
+      "id": "EW2",
+      "name": "Tampines",
       "schematic_x": 1
     },
     {
-      "id": "N03",
-      "name": "Demo Station C",
+      "id": "EW3",
+      "name": "Simei",
       "schematic_x": 2
     },
     {
-      "id": "N04",
-      "name": "Demo Station D",
+      "id": "EW4",
+      "name": "Tanah Merah",
       "schematic_x": 3
     },
     {
-      "id": "N05",
-      "name": "Demo Station E",
+      "id": "EW5",
+      "name": "Bedok",
       "schematic_x": 4
     },
     {
-      "id": "N06",
-      "name": "Demo Station F",
+      "id": "EW6",
+      "name": "Kembangan",
       "schematic_x": 5
     },
     {
-      "id": "N07",
-      "name": "Demo Station G",
+      "id": "EW7",
+      "name": "Eunos",
       "schematic_x": 6
     }
   ],
   "sectors": [
     {
       "id": "S01",
-      "from_station": "N01",
-      "to_station": "N02",
-      "direction": "A_to_G",
+      "from_station": "EW1",
+      "to_station": "EW2",
+      "direction": "Westbound",
       "power_zone": "Z01",
       "exclusive_protection": true
     },
     {
       "id": "S02",
-      "from_station": "N02",
-      "to_station": "N03",
-      "direction": "A_to_G",
+      "from_station": "EW2",
+      "to_station": "EW3",
+      "direction": "Westbound",
       "power_zone": "Z01",
       "exclusive_protection": true
     },
     {
       "id": "S03",
-      "from_station": "N03",
-      "to_station": "N04",
-      "direction": "A_to_G",
+      "from_station": "EW3",
+      "to_station": "EW4",
+      "direction": "Westbound",
       "power_zone": "Z02",
       "exclusive_protection": true
     },
     {
       "id": "S04",
-      "from_station": "N04",
-      "to_station": "N05",
-      "direction": "A_to_G",
+      "from_station": "EW4",
+      "to_station": "EW5",
+      "direction": "Westbound",
       "power_zone": "Z02",
       "exclusive_protection": true
     },
     {
       "id": "S05",
-      "from_station": "N05",
-      "to_station": "N06",
-      "direction": "A_to_G",
+      "from_station": "EW5",
+      "to_station": "EW6",
+      "direction": "Westbound",
       "power_zone": "Z03",
       "exclusive_protection": true
     },
     {
       "id": "S06",
-      "from_station": "N06",
-      "to_station": "N07",
-      "direction": "A_to_G",
+      "from_station": "EW6",
+      "to_station": "EW7",
+      "direction": "Westbound",
       "power_zone": "Z03",
       "exclusive_protection": true
     }

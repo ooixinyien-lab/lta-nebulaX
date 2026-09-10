@@ -67,6 +67,7 @@ def health():
 def public_config(request: Request):
     s = request.app.state.settings
     return {"auth_mode": s.auth_mode, "solver_engine": s.solver_engine,
+            "ui_demo": s.ui_demo and s.auth_mode == "demo" and s.app_env == "development",
             "demo_users": list(DEMO_USERS.values()) if s.auth_mode == "demo" else [],
             "supabase_url": s.supabase_url if s.auth_mode == "supabase" else "",
             "supabase_publishable_key": s.supabase_publishable_key if s.auth_mode == "supabase" else "",

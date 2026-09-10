@@ -190,7 +190,7 @@ Read [docs/SUPABASE.md](docs/SUPABASE.md). It covers project configuration, offi
 
 ## 8. Current scope: working vs not implemented
 
-**Working in the tested demo:** separate role views; ownership filtering; request submission/withdrawal; persistent records; real rule checking; a real small-demo search; proposal preview; single-officer approval/publication; revision-based stale-plan rejection; atomic writes; resource updates; demo reset; audit records.
+**Working in the tested demo:** separate role views; ownership filtering; request submission/withdrawal; officer mass approval; persistent records; seven-night utilization overview; full-screen manual scheduling with five-minute drag placement; immediate visual conflict rechecking; bulk persistent job locks; unlocked-booking reshuffling; a real small-demo search; manual and generated proposal preview; single-officer publication; revision-based stale-plan rejection; atomic writes; resource updates; demo reset; audit records.
 
 **Implemented but not executed against the real service/dependency in the build environment:** the CP-SAT model, and real Supabase sign-in/identity verification. Their tests/configuration are included. See the test report.
 

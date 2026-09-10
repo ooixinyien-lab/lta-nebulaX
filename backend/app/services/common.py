@@ -31,7 +31,7 @@ def preferred_plan(snapshot):
     allocations = [a.copy() for a in snapshot["committed_allocations"]]
     booked = {a["request_id"] for a in allocations}
     for r in snapshot["requests"]:
-        if r["status"] == "submitted" and r["id"] not in booked:
+        if r["status"] == "approved" and r["id"] not in booked:
             engineer = r.get("preferred_engineer") or next(iter(r["eligible_engineers"]), "UNASSIGNED")
             allocations.append(make_allocation(r, r["preferred_start"], engineer))
     return allocations

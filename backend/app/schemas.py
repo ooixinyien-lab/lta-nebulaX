@@ -71,6 +71,40 @@ class RequestCreate(StrictModel):
 class CommitInput(StrictModel):
     expected_version: int = Field(ge=1)
 
+
+class AllocationDraft(StrictModel):
+    request_id: str
+    start: datetime
+    engineer_id: str
+    locked: bool = False
+
+    @field_validator("start")
+    @classmethod
+    def valid_start(cls, v):
+        if v.utcoffset() is None:
+            raise ValueError("Include a timezone, for example +08:00")
+        if v.second or v.microsecond:
+            raise ValueError("Use whole minutes")
+        return v.astimezone(SGT)
+
+
+class ManualPlanInput(StrictModel):
+    allocations: list[AllocationDraft] = Field(min_length=1, max_length=40)
+
+
+class SolveInput(StrictModel):
+    locked_allocations: list[AllocationDraft] = Field(default_factory=list, max_length=40)
+
+
+class ApprovalInput(StrictModel):
+    request_ids: list[str] = Field(min_length=1, max_length=40)
+    approved: bool
+
+
+class AllocationLockInput(StrictModel):
+    request_ids: list[str] = Field(min_length=1, max_length=40)
+    locked: bool
+
 class ResourceChange(StrictModel):
     kind: Literal["engineers", "equipment"]
     id: str

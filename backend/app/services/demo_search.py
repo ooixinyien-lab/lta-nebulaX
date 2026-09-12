@@ -7,11 +7,14 @@ from .candidates import candidates, allocation_cost
 from .checker import check_plan
 
 
-def solve(snapshot: dict, time_limit: float = 8) -> dict:
+def solve(snapshot: dict, time_limit: float = 8, locked_allocations=None) -> dict:
     started = monotonic()
-    fixed = [a.copy() for a in snapshot["committed_allocations"]]
+    fixed_by_id = {a["request_id"]: a.copy() for a in snapshot["committed_allocations"] if a.get("locked")}
+    for allocation in locked_allocations or []:
+        fixed_by_id[allocation["request_id"]] = {**allocation, "locked": True}
+    fixed = list(fixed_by_id.values())
     ids = {a["request_id"] for a in fixed}
-    remaining = [r for r in snapshot["requests"] if r["status"] == "submitted" and r["id"] not in ids]
+    remaining = [r for r in snapshot["requests"] if r["status"] in ("approved", "scheduled") and r["id"] not in ids]
     base = {"engine": "demo_search", "allocations": []}
     if len(remaining) > 6:
         return {**base, "status": "LIMIT", "message": "Demo search is capped at six pending jobs. Select CP-SAT for larger tests.", "elapsed_seconds": 0}
@@ -26,7 +29,7 @@ def solve(snapshot: dict, time_limit: float = 8) -> dict:
         ordered.append(r)
         remaining.remove(r)
         ids.add(r["id"])
-    n = sum(r["status"] in ("scheduled", "submitted") for r in snapshot["requests"])
+    n = sum(r["status"] in ("scheduled", "approved") for r in snapshot["requests"])
     options = []
     for r in ordered:
         choices = candidates(snapshot, r)
@@ -57,8 +60,6 @@ def solve(snapshot: dict, time_limit: float = 8) -> dict:
                 break
     visit(0, fixed, 0)
     if best is not None:
-        for a in best:
-            a["locked"] = True
         return {**base, "status": "FEASIBLE" if timed_out else "OPTIMAL", "allocations": best,
                 "objective": best_cost, "elapsed_seconds": round(monotonic()-started, 4),
                 "message": "Tiny-demo enumerative result, not CP-SAT. Approval is still required."}

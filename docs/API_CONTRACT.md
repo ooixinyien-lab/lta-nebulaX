@@ -14,8 +14,12 @@ In demo mode use `X-Demo-User: demo-track`, `demo-signals` or `demo-officer`. Th
 | `GET /planning-snapshot` | Signed in | Current data; requesters get only their own requests and allocations plus anonymised occupancy |
 | `POST /requests` | Requester | Validate/store a request; server sets ownership/status and eligible engineers |
 | `POST /requests/{id}/cancel` | Owning requester | Withdraw an unbooked request if no active dependent request blocks withdrawal |
+| `PATCH /requests/approval` | Officer | Mass approve or return unscheduled requests to requested state |
+| `PATCH /allocations/locks` | Officer | Persistently lock or unlock published schedule allocations |
 | `POST /conflicts/check` | Officer | Check requested positions combined with current bookings |
-| `POST /schedule/proposals` | Officer | Calculate one plan for all active work; no publication |
+| `POST /schedule/check` | Officer | Validate the complete set of positions from the manual scheduling board |
+| `POST /schedule/proposals` | Officer | Calculate one plan for all active work while preserving supplied locks; no publication |
+| `POST /schedule/manual-proposals` | Officer | Independently check and stage the officer's manual plan for approval; unlocked committed jobs may be omitted to return them to the approved pool on publish |
 | `GET /proposals` | Officer | Last ten stored feasible proposals |
 | `POST /proposals/{id}/commit` | Officer | Approve and publish that exact version atomically |
 | `PATCH /resources` | Officer | Add an unavailable interval or change equipment serviceability |
@@ -119,6 +123,34 @@ An allocation contains:
   "equipment_ids": ["Q03"],
   "locked": true
 }
+```
+
+For manual checking and staging, send each active allocation as `request_id`, `start`, `engineer_id` and `locked`. The server derives the end time and exact equipment requirement rather than trusting them from the browser. A manual check returns all structured issues without storing a proposal. A valid manual proposal can use the existing publish route.
+
+The solver route optionally accepts locks:
+
+```json
+{
+  "locked_allocations": [
+    {"request_id": "R04", "start": "2026-09-14T02:35:00+08:00", "engineer_id": "E01", "locked": true}
+  ]
+}
+```
+
+Only approved or already scheduled jobs may be supplied as solver locks. Published allocations marked `locked` are fixed; published unlocked allocations may be reshuffled with approved work. If the locked subset already conflicts, the route returns `LOCK_CONFLICT` with structured issues and does not run the remaining search.
+
+## Approval and lock workflow
+
+New requester work starts as `submitted`. Officers can mass-change unscheduled requests between `submitted` and `approved`:
+
+```json
+{"request_ids": ["R03", "R04"], "approved": true}
+```
+
+Only `approved` and `scheduled` work enters planning checks and solver runs. Publication changes approved work to `scheduled`. Published allocations retain an independent `locked` flag, which officers can change in bulk:
+
+```json
+{"request_ids": ["R01", "R02"], "locked": false}
 ```
 
 ## Publish

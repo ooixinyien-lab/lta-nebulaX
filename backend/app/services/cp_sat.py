@@ -8,21 +8,23 @@ from .common import dt, duration, make_allocation, zones
 from .candidates import candidates
 
 
-def solve(snapshot: dict, time_limit: float = 8) -> dict:
+def solve(snapshot: dict, time_limit: float = 8, locked_allocations=None) -> dict:
     started = monotonic()
     try:
         from ortools.sat.python import cp_model
     except ImportError:
         return {"status": "UNAVAILABLE", "engine": "cp_sat", "allocations": [],
                 "message": "Install requirements-cpsat.txt to enable OR-Tools, or explicitly select SOLVER_ENGINE=demo_search for the tiny local demo.", "elapsed_seconds": 0}
-    requests = [r for r in snapshot["requests"] if r["status"] in ("scheduled", "submitted")]
+    requests = [r for r in snapshot["requests"] if r["status"] in ("scheduled", "approved")]
     if len(requests) > 40:
         return {"status": "LIMIT", "engine": "cp_sat", "allocations": [], "message": "Starter limit is 40 active jobs. Benchmark a larger model before increasing it.", "elapsed_seconds": 0}
     base = dt(min(w["start"] for w in snapshot["engineering_windows"]))
     minute = lambda s: int((dt(s) - base).total_seconds() // 60)
     horizon = minute(max(w["end"] for w in snapshot["engineering_windows"])) + 1440
     engineer_ids = [e["id"] for e in snapshot["engineers"]]
-    fixed = {a["request_id"]: a for a in snapshot["committed_allocations"]}
+    fixed = {a["request_id"]: a.copy() for a in snapshot["committed_allocations"] if a.get("locked")}
+    for allocation in locked_allocations or []:
+        fixed[allocation["request_id"]] = {**allocation, "locked": True}
     model = cp_model.CpModel()
     tasks = {}
     cost_terms = []
@@ -97,7 +99,7 @@ def solve(snapshot: dict, time_limit: float = 8) -> dict:
                 result["allocations"].append(fixed[r["id"]].copy())
             else:
                 t = tasks[r["id"]]
-                result["allocations"].append(make_allocation(r, base+timedelta(minutes=solver.value(t["start"])), engineer_ids[solver.value(t["eng"])], locked=True))
+                result["allocations"].append(make_allocation(r, base+timedelta(minutes=solver.value(t["start"])), engineer_ids[solver.value(t["eng"])]))
         result["objective"] = solver.objective_value
         result["message"] = "All active jobs allocated under the demo constraints. Officer approval is still required."
     else:

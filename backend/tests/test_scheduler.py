@@ -3,8 +3,16 @@ from copy import deepcopy
 import pytest
 from backend.app.services.scheduler import solve
 from backend.app.services.checker import check_plan
+from backend.app.services.common import make_allocation
 
 HAS_CP_SAT = importlib.util.find_spec('ortools') is not None
+
+
+@pytest.fixture(autouse=True)
+def approve_seed_work(snapshot):
+    for request in snapshot['requests']:
+        if request['status']=='submitted':
+            request['status']='approved'
 
 
 def test_demo_solver_calculates_reference_plan(snapshot):
@@ -44,6 +52,16 @@ def test_date_flexibility_uses_different_nights(snapshot):
     snapshot['requests'][2]['allowed_dates']=['2026-09-15']
     result=solve(snapshot,'demo_search')
     assert next(a for a in result['allocations'] if a['request_id']=='R03')['start'].startswith('2026-09-15')
+
+
+def test_demo_solver_preserves_manual_lock(snapshot):
+    request=next(r for r in snapshot['requests'] if r['id']=='R03')
+    locked=make_allocation(request,'2026-09-14T02:30:00+08:00','E03',locked=True)
+    result=solve(snapshot,'demo_search',locked_allocations=[locked])
+    allocation=next(a for a in result['allocations'] if a['request_id']=='R03')
+    assert allocation['start']=='2026-09-14T02:30:00+08:00'
+    assert allocation['locked'] is True
+    assert not check_plan(snapshot,result['allocations'],True)
 
 
 @pytest.mark.skipif(not HAS_CP_SAT,reason='OR-Tools not installed; install requirements-cpsat.txt')

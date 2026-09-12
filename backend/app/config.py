@@ -16,6 +16,7 @@ class Settings(BaseSettings):
     app_env: Literal["development", "test", "production"] = "development"
     auth_mode: Literal["demo", "supabase"] = "demo"
     solver_engine: Literal["cp_sat", "demo_search"] = "demo_search"
+    ui_demo: bool = False
     solver_time_limit_seconds: float = 8.0
     database_path: str = str(ROOT / "backend" / "railplan.sqlite3")
     supabase_url: str = ""

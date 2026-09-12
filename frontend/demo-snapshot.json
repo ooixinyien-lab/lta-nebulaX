@@ -1,0 +1,1837 @@
+{
+  "metadata": {
+    "schema_version": "1.0",
+    "planning_version": 1,
+    "timezone": "Asia/Singapore",
+    "planning_date": "2026-09-14",
+    "synthetic": true,
+    "description": "Preset UI demo based on the comprehensive EWL dataset",
+    "disclaimer": "NOT operational data. Fictional, synthetic scheduling scenario based on Singapore MRT East-West Line stations and real-world depots (Changi Depot, Tuas Depot).",
+    "scope": "Twelve-request comprehensive benchmark fixture along the East-West Line (EW1-EW7) covering track sectors, power zones, and maintenance depots.",
+    "simplifications": [
+      "Single-direction East-West Line (Westbound) corridor with realistic schematic station spacing.",
+      "Exclusive protection footprints across all request phases.",
+      "Synthetic planning guards for power transitions and site transfers.",
+      "Pooled resources track capacity limits rather than spatial transit."
+    ],
+    "ui_demo": true
+  },
+  "stations": [
+    {
+      "id": "EW1",
+      "name": "Pasir Ris",
+      "schematic_x": 0
+    },
+    {
+      "id": "EW2",
+      "name": "Tampines",
+      "schematic_x": 1
+    },
+    {
+      "id": "EW3",
+      "name": "Simei",
+      "schematic_x": 2
+    },
+    {
+      "id": "EW4",
+      "name": "Tanah Merah",
+      "schematic_x": 3
+    },
+    {
+      "id": "EW5",
+      "name": "Bedok",
+      "schematic_x": 4
+    },
+    {
+      "id": "EW6",
+      "name": "Kembangan",
+      "schematic_x": 5
+    },
+    {
+      "id": "EW7",
+      "name": "Eunos",
+      "schematic_x": 6
+    }
+  ],
+  "power_zones": [
+    {
+      "id": "Z01",
+      "sector_ids": [
+        "S01",
+        "S02"
+      ]
+    },
+    {
+      "id": "Z02",
+      "sector_ids": [
+        "S03",
+        "S04"
+      ]
+    },
+    {
+      "id": "Z03",
+      "sector_ids": [
+        "S05",
+        "S06"
+      ]
+    }
+  ],
+  "sectors": [
+    {
+      "id": "S01",
+      "from_station": "EW1",
+      "to_station": "EW2",
+      "direction": "Westbound",
+      "power_zone": "Z01",
+      "exclusive_protection": true,
+      "fixed_unavailable_intervals": []
+    },
+    {
+      "id": "S02",
+      "from_station": "EW2",
+      "to_station": "EW3",
+      "direction": "Westbound",
+      "power_zone": "Z01",
+      "exclusive_protection": true,
+      "fixed_unavailable_intervals": []
+    },
+    {
+      "id": "S03",
+      "from_station": "EW3",
+      "to_station": "EW4",
+      "direction": "Westbound",
+      "power_zone": "Z02",
+      "exclusive_protection": true,
+      "fixed_unavailable_intervals": []
+    },
+    {
+      "id": "S04",
+      "from_station": "EW4",
+      "to_station": "EW5",
+      "direction": "Westbound",
+      "power_zone": "Z02",
+      "exclusive_protection": true,
+      "fixed_unavailable_intervals": []
+    },
+    {
+      "id": "S05",
+      "from_station": "EW5",
+      "to_station": "EW6",
+      "direction": "Westbound",
+      "power_zone": "Z03",
+      "exclusive_protection": true,
+      "fixed_unavailable_intervals": []
+    },
+    {
+      "id": "S06",
+      "from_station": "EW6",
+      "to_station": "EW7",
+      "direction": "Westbound",
+      "power_zone": "Z03",
+      "exclusive_protection": true,
+      "fixed_unavailable_intervals": []
+    }
+  ],
+  "engineering_windows": [
+    {
+      "date": "2026-09-14",
+      "sector_ids": [
+        "S01",
+        "S02",
+        "S03",
+        "S04",
+        "S05",
+        "S06"
+      ],
+      "start": "2026-09-14T01:00:00+08:00",
+      "end": "2026-09-14T04:30:00+08:00",
+      "handback_buffer_minutes": 20
+    },
+    {
+      "date": "2026-09-15",
+      "sector_ids": [
+        "S01",
+        "S02",
+        "S03",
+        "S04",
+        "S05",
+        "S06"
+      ],
+      "start": "2026-09-15T01:00:00+08:00",
+      "end": "2026-09-15T04:30:00+08:00",
+      "handback_buffer_minutes": 20
+    },
+    {
+      "date": "2026-09-16",
+      "sector_ids": [
+        "S01",
+        "S02",
+        "S03",
+        "S04",
+        "S05",
+        "S06"
+      ],
+      "start": "2026-09-16T01:00:00+08:00",
+      "end": "2026-09-16T04:30:00+08:00",
+      "handback_buffer_minutes": 20
+    },
+    {
+      "date": "2026-09-17",
+      "sector_ids": [
+        "S01",
+        "S02",
+        "S03",
+        "S04",
+        "S05",
+        "S06"
+      ],
+      "start": "2026-09-17T01:00:00+08:00",
+      "end": "2026-09-17T04:30:00+08:00",
+      "handback_buffer_minutes": 20
+    },
+    {
+      "date": "2026-09-18",
+      "sector_ids": [
+        "S01",
+        "S02",
+        "S03",
+        "S04",
+        "S05",
+        "S06"
+      ],
+      "start": "2026-09-18T01:00:00+08:00",
+      "end": "2026-09-18T04:30:00+08:00",
+      "handback_buffer_minutes": 20
+    },
+    {
+      "date": "2026-09-19",
+      "sector_ids": [
+        "S01",
+        "S02",
+        "S03",
+        "S04",
+        "S05",
+        "S06"
+      ],
+      "start": "2026-09-19T01:00:00+08:00",
+      "end": "2026-09-19T04:30:00+08:00",
+      "handback_buffer_minutes": 20
+    },
+    {
+      "date": "2026-09-20",
+      "sector_ids": [
+        "S01",
+        "S02",
+        "S03",
+        "S04",
+        "S05",
+        "S06"
+      ],
+      "start": "2026-09-20T01:00:00+08:00",
+      "end": "2026-09-20T04:30:00+08:00",
+      "handback_buffer_minutes": 20
+    }
+  ],
+  "blackouts": [
+    {
+      "id": "B01",
+      "sector_ids": [
+        "S01"
+      ],
+      "start": "2026-09-14T03:00:00+08:00",
+      "end": "2026-09-14T04:30:00+08:00",
+      "reason": "Viaduct structural testing and concrete scanning"
+    }
+  ],
+  "planning_rules": {
+    "source": "synthetic_rules_v1",
+    "start_grid_minutes": 5,
+    "different_site_transfer_minutes": 15,
+    "opposed_power_transition_minutes": 10,
+    "morning_buffer_minutes": 20,
+    "freeze_horizon_days": 3,
+    "power_values": [
+      "ON",
+      "OFF",
+      "NONE"
+    ],
+    "power_compatibility": {
+      "ON": {
+        "ON": true,
+        "OFF": false,
+        "NONE": true
+      },
+      "OFF": {
+        "ON": false,
+        "OFF": true,
+        "NONE": true
+      },
+      "NONE": {
+        "ON": true,
+        "OFF": true,
+        "NONE": true
+      }
+    },
+    "work_compatibility_rules": [
+      {
+        "work_type_a": "rail_replacement",
+        "work_type_b": "dynamic_signalling_test",
+        "compatible": false,
+        "transition_minutes": 15
+      },
+      {
+        "work_type_a": "track_tamping",
+        "work_type_b": "sensor_inspection",
+        "compatible": false,
+        "transition_minutes": 10
+      },
+      {
+        "work_type_a": "point_machine_service",
+        "work_type_b": "track_inspection",
+        "compatible": false,
+        "transition_minutes": 10
+      }
+    ],
+    "unknown_rule_policy": "REVIEW_REQUIRED"
+  },
+  "engineers": [
+    {
+      "id": "E01",
+      "name": "Engineer E01",
+      "skills": [
+        "track",
+        "tamping"
+      ],
+      "initial_sector": "S02",
+      "availability": [
+        {
+          "start": "2026-09-14T01:15:00+08:00",
+          "end": "2026-09-14T04:45:00+08:00"
+        },
+        {
+          "start": "2026-09-15T01:15:00+08:00",
+          "end": "2026-09-15T04:45:00+08:00"
+        }
+      ],
+      "unavailable": []
+    },
+    {
+      "id": "E02",
+      "name": "Engineer E02",
+      "skills": [
+        "track",
+        "protection"
+      ],
+      "initial_sector": "S04",
+      "availability": [
+        {
+          "start": "2026-09-14T01:15:00+08:00",
+          "end": "2026-09-14T04:45:00+08:00"
+        },
+        {
+          "start": "2026-09-15T01:15:00+08:00",
+          "end": "2026-09-15T04:45:00+08:00"
+        }
+      ],
+      "unavailable": []
+    },
+    {
+      "id": "E03",
+      "name": "Engineer E03",
+      "skills": [
+        "signalling"
+      ],
+      "initial_sector": "S01",
+      "availability": [
+        {
+          "start": "2026-09-14T01:15:00+08:00",
+          "end": "2026-09-14T04:45:00+08:00"
+        },
+        {
+          "start": "2026-09-15T01:15:00+08:00",
+          "end": "2026-09-15T04:45:00+08:00"
+        }
+      ],
+      "unavailable": []
+    },
+    {
+      "id": "E04",
+      "name": "Engineer E04",
+      "skills": [
+        "signalling",
+        "inspection"
+      ],
+      "initial_sector": "S03",
+      "availability": [
+        {
+          "start": "2026-09-14T01:15:00+08:00",
+          "end": "2026-09-14T04:45:00+08:00"
+        },
+        {
+          "start": "2026-09-15T01:15:00+08:00",
+          "end": "2026-09-15T04:45:00+08:00"
+        }
+      ],
+      "unavailable": []
+    },
+    {
+      "id": "E05",
+      "name": "Engineer E05",
+      "skills": [
+        "power"
+      ],
+      "initial_sector": "S02",
+      "availability": [
+        {
+          "start": "2026-09-14T01:15:00+08:00",
+          "end": "2026-09-14T04:45:00+08:00"
+        },
+        {
+          "start": "2026-09-15T01:15:00+08:00",
+          "end": "2026-09-15T04:45:00+08:00"
+        }
+      ],
+      "unavailable": []
+    },
+    {
+      "id": "E06",
+      "name": "Engineer E06",
+      "skills": [
+        "inspection",
+        "power"
+      ],
+      "initial_sector": "S05",
+      "availability": [
+        {
+          "start": "2026-09-14T01:15:00+08:00",
+          "end": "2026-09-14T04:45:00+08:00"
+        },
+        {
+          "start": "2026-09-15T01:15:00+08:00",
+          "end": "2026-09-15T04:45:00+08:00"
+        }
+      ],
+      "unavailable": []
+    },
+    {
+      "id": "E07",
+      "name": "Engineer E07",
+      "skills": [
+        "track"
+      ],
+      "initial_sector": "S01",
+      "availability": [
+        {
+          "start": "2026-09-14T01:15:00+08:00",
+          "end": "2026-09-14T04:45:00+08:00"
+        },
+        {
+          "start": "2026-09-15T01:15:00+08:00",
+          "end": "2026-09-15T04:45:00+08:00"
+        }
+      ],
+      "unavailable": [
+        {
+          "start": "2026-09-14T01:15:00+08:00",
+          "end": "2026-09-14T02:30:00+08:00"
+        }
+      ]
+    }
+  ],
+  "equipment": [
+    {
+      "id": "Q01",
+      "type": "track_machine",
+      "initial_sector": "S02",
+      "capacity": 1,
+      "availability": [
+        {
+          "start": "2026-09-14T01:15:00+08:00",
+          "end": "2026-09-14T04:45:00+08:00"
+        },
+        {
+          "start": "2026-09-15T01:15:00+08:00",
+          "end": "2026-09-15T04:45:00+08:00"
+        }
+      ],
+      "unavailable": [],
+      "serviceable": true
+    },
+    {
+      "id": "Q02",
+      "type": "inspection_kit",
+      "initial_sector": "S05",
+      "capacity": 1,
+      "availability": [
+        {
+          "start": "2026-09-14T01:15:00+08:00",
+          "end": "2026-09-14T04:45:00+08:00"
+        },
+        {
+          "start": "2026-09-15T01:15:00+08:00",
+          "end": "2026-09-15T04:45:00+08:00"
+        }
+      ],
+      "unavailable": [],
+      "serviceable": true
+    },
+    {
+      "id": "Q03",
+      "type": "signalling_kit",
+      "initial_sector": "S01",
+      "capacity": 1,
+      "availability": [
+        {
+          "start": "2026-09-14T01:15:00+08:00",
+          "end": "2026-09-14T04:45:00+08:00"
+        },
+        {
+          "start": "2026-09-15T01:15:00+08:00",
+          "end": "2026-09-15T04:45:00+08:00"
+        }
+      ],
+      "unavailable": [],
+      "serviceable": true
+    },
+    {
+      "id": "Q04",
+      "type": "tower_wagon",
+      "initial_sector": "S03",
+      "capacity": 1,
+      "availability": [
+        {
+          "start": "2026-09-14T01:15:00+08:00",
+          "end": "2026-09-14T04:45:00+08:00"
+        },
+        {
+          "start": "2026-09-15T01:15:00+08:00",
+          "end": "2026-09-15T04:45:00+08:00"
+        }
+      ],
+      "unavailable": [],
+      "serviceable": false
+    },
+    {
+      "id": "Q05",
+      "type": "portable_test_rig",
+      "initial_sector": "S04",
+      "capacity": 1,
+      "availability": [
+        {
+          "start": "2026-09-14T01:15:00+08:00",
+          "end": "2026-09-14T04:45:00+08:00"
+        },
+        {
+          "start": "2026-09-15T01:15:00+08:00",
+          "end": "2026-09-15T04:45:00+08:00"
+        }
+      ],
+      "unavailable": [],
+      "serviceable": true
+    }
+  ],
+  "resource_pools": [
+    {
+      "id": "TECH",
+      "name": "Technicians Pool",
+      "capacity": 5
+    },
+    {
+      "id": "TPO",
+      "name": "Track Protection Officers Pool",
+      "capacity": 2
+    }
+  ],
+  "requests": [
+    {
+      "id": "R01",
+      "title": "Rail replacement at Sector 02",
+      "status": "scheduled",
+      "owner_id": "demo-track",
+      "work_type": "rail_replacement",
+      "work_sector": "S02",
+      "protected_sectors": [
+        "S01",
+        "S02"
+      ],
+      "power_zone": "Z01",
+      "power_requirement": "OFF",
+      "phases": [
+        {
+          "name": "setup",
+          "duration_minutes": 10
+        },
+        {
+          "name": "work",
+          "duration_minutes": 40
+        },
+        {
+          "name": "test",
+          "duration_minutes": 10
+        },
+        {
+          "name": "handback",
+          "duration_minutes": 10
+        }
+      ],
+      "timing_mode": "RANGE",
+      "preferred_start": "2026-09-14T01:30:00+08:00",
+      "earliest_start": "2026-09-14T01:15:00+08:00",
+      "deadline": "2026-09-14T04:25:00+08:00",
+      "allowed_dates": [
+        "2026-09-14",
+        "2026-09-15",
+        "2026-09-16",
+        "2026-09-17",
+        "2026-09-18",
+        "2026-09-19",
+        "2026-09-20"
+      ],
+      "deferrable": true,
+      "mandatory": false,
+      "approved": true,
+      "frozen": true,
+      "existing_start": "2026-09-14T01:30:00+08:00",
+      "urgency_score": 4,
+      "priority": null,
+      "required_skill": "track",
+      "required_engineer_roles": {
+        "track": 1
+      },
+      "eligible_engineers": [
+        "E01",
+        "E02",
+        "E07"
+      ],
+      "preferred_engineer": "E01",
+      "required_equipment_ids": [
+        "Q01"
+      ],
+      "technicians_required": 0,
+      "pooled_resources": {
+        "TECH": 2
+      },
+      "depends_on": [],
+      "handover_buffer_minutes": 0,
+      "handover_buffers": {},
+      "split_allowed": false
+    },
+    {
+      "id": "R02",
+      "title": "Sensor inspection at Sector 05",
+      "status": "scheduled",
+      "owner_id": "demo-signals",
+      "work_type": "sensor_inspection",
+      "work_sector": "S05",
+      "protected_sectors": [
+        "S05"
+      ],
+      "power_zone": "Z03",
+      "power_requirement": "NONE",
+      "phases": [
+        {
+          "name": "setup",
+          "duration_minutes": 10
+        },
+        {
+          "name": "work",
+          "duration_minutes": 25
+        },
+        {
+          "name": "test",
+          "duration_minutes": 5
+        },
+        {
+          "name": "handback",
+          "duration_minutes": 10
+        }
+      ],
+      "timing_mode": "RANGE",
+      "preferred_start": "2026-09-14T01:20:00+08:00",
+      "earliest_start": "2026-09-14T01:15:00+08:00",
+      "deadline": "2026-09-14T04:25:00+08:00",
+      "allowed_dates": [
+        "2026-09-14",
+        "2026-09-15",
+        "2026-09-16",
+        "2026-09-17",
+        "2026-09-18",
+        "2026-09-19",
+        "2026-09-20"
+      ],
+      "deferrable": true,
+      "mandatory": false,
+      "approved": true,
+      "frozen": false,
+      "existing_start": "2026-09-14T02:00:00+08:00",
+      "urgency_score": 3,
+      "priority": null,
+      "required_skill": "inspection",
+      "required_engineer_roles": {
+        "inspection": 1
+      },
+      "eligible_engineers": [
+        "E04",
+        "E06"
+      ],
+      "preferred_engineer": "E04",
+      "required_equipment_ids": [
+        "Q02"
+      ],
+      "technicians_required": 0,
+      "pooled_resources": {
+        "TECH": 1
+      },
+      "depends_on": [],
+      "handover_buffer_minutes": 0,
+      "handover_buffers": {},
+      "split_allowed": false
+    },
+    {
+      "id": "R03",
+      "title": "Dynamic signalling test at Sector 02",
+      "status": "scheduled",
+      "owner_id": "demo-signals",
+      "work_type": "dynamic_signalling_test",
+      "work_sector": "S02",
+      "protected_sectors": [
+        "S02"
+      ],
+      "power_zone": "Z01",
+      "power_requirement": "ON",
+      "phases": [
+        {
+          "name": "setup",
+          "duration_minutes": 10
+        },
+        {
+          "name": "work",
+          "duration_minutes": 25
+        },
+        {
+          "name": "test",
+          "duration_minutes": 5
+        },
+        {
+          "name": "handback",
+          "duration_minutes": 10
+        }
+      ],
+      "timing_mode": "RANGE",
+      "preferred_start": "2026-09-14T03:00:00+08:00",
+      "earliest_start": "2026-09-14T01:15:00+08:00",
+      "deadline": "2026-09-14T04:25:00+08:00",
+      "allowed_dates": [
+        "2026-09-14",
+        "2026-09-15",
+        "2026-09-16",
+        "2026-09-17",
+        "2026-09-18",
+        "2026-09-19",
+        "2026-09-20"
+      ],
+      "deferrable": true,
+      "mandatory": false,
+      "approved": false,
+      "frozen": false,
+      "existing_start": null,
+      "urgency_score": 3,
+      "priority": null,
+      "required_skill": "signalling",
+      "required_engineer_roles": {
+        "signalling": 1
+      },
+      "eligible_engineers": [
+        "E03",
+        "E04"
+      ],
+      "preferred_engineer": "E03",
+      "required_equipment_ids": [
+        "Q03"
+      ],
+      "technicians_required": 0,
+      "pooled_resources": {
+        "TECH": 1
+      },
+      "depends_on": [
+        "R01"
+      ],
+      "handover_buffer_minutes": 15,
+      "handover_buffers": {},
+      "split_allowed": false
+    },
+    {
+      "id": "R04",
+      "title": "Exact rail replacement at Sector 01",
+      "status": "scheduled",
+      "owner_id": "demo-track",
+      "work_type": "rail_replacement",
+      "work_sector": "S01",
+      "protected_sectors": [
+        "S01",
+        "S02"
+      ],
+      "power_zone": "Z01",
+      "power_requirement": "OFF",
+      "phases": [
+        {
+          "name": "setup",
+          "duration_minutes": 10
+        },
+        {
+          "name": "work",
+          "duration_minutes": 40
+        },
+        {
+          "name": "test",
+          "duration_minutes": 10
+        },
+        {
+          "name": "handback",
+          "duration_minutes": 10
+        }
+      ],
+      "timing_mode": "EXACT",
+      "preferred_start": "2026-09-15T01:20:00+08:00",
+      "earliest_start": "2026-09-14T02:00:00+08:00",
+      "deadline": "2026-09-14T03:10:00+08:00",
+      "allowed_dates": [
+        "2026-09-14",
+        "2026-09-15",
+        "2026-09-16",
+        "2026-09-17",
+        "2026-09-18",
+        "2026-09-19",
+        "2026-09-20"
+      ],
+      "deferrable": true,
+      "mandatory": false,
+      "approved": false,
+      "frozen": false,
+      "existing_start": null,
+      "urgency_score": 3,
+      "priority": null,
+      "required_skill": "track",
+      "required_engineer_roles": {
+        "track": 1
+      },
+      "eligible_engineers": [
+        "E01",
+        "E02",
+        "E07"
+      ],
+      "preferred_engineer": "E02",
+      "required_equipment_ids": [
+        "Q01"
+      ],
+      "technicians_required": 0,
+      "pooled_resources": {
+        "TECH": 2
+      },
+      "depends_on": [],
+      "handover_buffer_minutes": 0,
+      "handover_buffers": {},
+      "split_allowed": false
+    },
+    {
+      "id": "R05",
+      "title": "Catenary service at Sector 06",
+      "status": "scheduled",
+      "owner_id": "demo-signals",
+      "work_type": "catenary_service",
+      "work_sector": "S06",
+      "protected_sectors": [
+        "S06"
+      ],
+      "power_zone": "Z03",
+      "power_requirement": "OFF",
+      "phases": [
+        {
+          "name": "setup",
+          "duration_minutes": 10
+        },
+        {
+          "name": "work",
+          "duration_minutes": 30
+        },
+        {
+          "name": "test",
+          "duration_minutes": 10
+        },
+        {
+          "name": "handback",
+          "duration_minutes": 10
+        }
+      ],
+      "timing_mode": "RANGE",
+      "preferred_start": "2026-09-14T02:30:00+08:00",
+      "earliest_start": "2026-09-14T01:15:00+08:00",
+      "deadline": "2026-09-14T04:25:00+08:00",
+      "allowed_dates": [
+        "2026-09-14",
+        "2026-09-15",
+        "2026-09-16",
+        "2026-09-17",
+        "2026-09-18",
+        "2026-09-19",
+        "2026-09-20"
+      ],
+      "deferrable": true,
+      "mandatory": false,
+      "approved": false,
+      "frozen": false,
+      "existing_start": null,
+      "urgency_score": 3,
+      "priority": null,
+      "required_skill": "power",
+      "required_engineer_roles": {
+        "power": 1
+      },
+      "eligible_engineers": [
+        "E05",
+        "E06"
+      ],
+      "preferred_engineer": "E05",
+      "required_equipment_ids": [
+        "Q04"
+      ],
+      "technicians_required": 0,
+      "pooled_resources": {
+        "TECH": 2,
+        "TPO": 1
+      },
+      "depends_on": [],
+      "handover_buffer_minutes": 0,
+      "handover_buffers": {},
+      "split_allowed": false
+    },
+    {
+      "id": "R06",
+      "title": "Track tamping at Sector 04",
+      "status": "scheduled",
+      "owner_id": "demo-track",
+      "work_type": "track_tamping",
+      "work_sector": "S04",
+      "protected_sectors": [
+        "S04"
+      ],
+      "power_zone": "Z02",
+      "power_requirement": "NONE",
+      "phases": [
+        {
+          "name": "setup",
+          "duration_minutes": 10
+        },
+        {
+          "name": "work",
+          "duration_minutes": 30
+        },
+        {
+          "name": "test",
+          "duration_minutes": 10
+        },
+        {
+          "name": "handback",
+          "duration_minutes": 10
+        }
+      ],
+      "timing_mode": "RANGE",
+      "preferred_start": "2026-09-14T01:20:00+08:00",
+      "earliest_start": "2026-09-14T01:15:00+08:00",
+      "deadline": "2026-09-14T04:25:00+08:00",
+      "allowed_dates": [
+        "2026-09-14",
+        "2026-09-15",
+        "2026-09-16",
+        "2026-09-17",
+        "2026-09-18",
+        "2026-09-19",
+        "2026-09-20"
+      ],
+      "deferrable": true,
+      "mandatory": false,
+      "approved": false,
+      "frozen": false,
+      "existing_start": null,
+      "urgency_score": 3,
+      "priority": null,
+      "required_skill": "track",
+      "required_engineer_roles": {
+        "track": 1
+      },
+      "eligible_engineers": [
+        "E01",
+        "E02",
+        "E07"
+      ],
+      "preferred_engineer": "E07",
+      "required_equipment_ids": [],
+      "technicians_required": 0,
+      "pooled_resources": {
+        "TECH": 4,
+        "TPO": 1
+      },
+      "depends_on": [],
+      "handover_buffer_minutes": 0,
+      "handover_buffers": {},
+      "split_allowed": false
+    },
+    {
+      "id": "R07",
+      "title": "Point machine service at Sector 01",
+      "status": "scheduled",
+      "owner_id": "demo-signals",
+      "work_type": "point_machine_service",
+      "work_sector": "S01",
+      "protected_sectors": [
+        "S01"
+      ],
+      "power_zone": "Z01",
+      "power_requirement": "NONE",
+      "phases": [
+        {
+          "name": "setup",
+          "duration_minutes": 10
+        },
+        {
+          "name": "work",
+          "duration_minutes": 30
+        },
+        {
+          "name": "test",
+          "duration_minutes": 10
+        },
+        {
+          "name": "handback",
+          "duration_minutes": 10
+        }
+      ],
+      "timing_mode": "RANGE",
+      "preferred_start": "2026-09-15T03:00:00+08:00",
+      "earliest_start": "2026-09-14T01:15:00+08:00",
+      "deadline": "2026-09-14T04:25:00+08:00",
+      "allowed_dates": [
+        "2026-09-14",
+        "2026-09-15",
+        "2026-09-16",
+        "2026-09-17",
+        "2026-09-18",
+        "2026-09-19",
+        "2026-09-20"
+      ],
+      "deferrable": true,
+      "mandatory": false,
+      "approved": false,
+      "frozen": false,
+      "existing_start": null,
+      "urgency_score": 3,
+      "priority": null,
+      "required_skill": "signalling",
+      "required_engineer_roles": {
+        "signalling": 1
+      },
+      "eligible_engineers": [
+        "E03",
+        "E04"
+      ],
+      "preferred_engineer": "E03",
+      "required_equipment_ids": [
+        "Q03"
+      ],
+      "technicians_required": 0,
+      "pooled_resources": {
+        "TECH": 1
+      },
+      "depends_on": [],
+      "handover_buffer_minutes": 0,
+      "handover_buffers": {},
+      "split_allowed": false
+    },
+    {
+      "id": "R08",
+      "title": "Rail replacement at Sector 03 with handback overflow",
+      "status": "scheduled",
+      "owner_id": "demo-track",
+      "work_type": "rail_replacement",
+      "work_sector": "S03",
+      "protected_sectors": [
+        "S03"
+      ],
+      "power_zone": "Z02",
+      "power_requirement": "OFF",
+      "phases": [
+        {
+          "name": "setup",
+          "duration_minutes": 10
+        },
+        {
+          "name": "work",
+          "duration_minutes": 40
+        },
+        {
+          "name": "test",
+          "duration_minutes": 10
+        },
+        {
+          "name": "handback",
+          "duration_minutes": 10
+        }
+      ],
+      "timing_mode": "RANGE",
+      "preferred_start": "2026-09-15T01:20:00+08:00",
+      "earliest_start": "2026-09-14T01:15:00+08:00",
+      "deadline": "2026-09-14T04:45:00+08:00",
+      "allowed_dates": [
+        "2026-09-14",
+        "2026-09-15",
+        "2026-09-16",
+        "2026-09-17",
+        "2026-09-18",
+        "2026-09-19",
+        "2026-09-20"
+      ],
+      "deferrable": true,
+      "mandatory": false,
+      "approved": false,
+      "frozen": false,
+      "existing_start": null,
+      "urgency_score": 3,
+      "priority": null,
+      "required_skill": "track",
+      "required_engineer_roles": {
+        "track": 1
+      },
+      "eligible_engineers": [
+        "E01",
+        "E02",
+        "E07"
+      ],
+      "preferred_engineer": "E01",
+      "required_equipment_ids": [],
+      "technicians_required": 0,
+      "pooled_resources": {
+        "TECH": 2
+      },
+      "depends_on": [],
+      "handover_buffer_minutes": 0,
+      "handover_buffers": {},
+      "split_allowed": false
+    },
+    {
+      "id": "R09",
+      "title": "Mandatory service-critical rail replacement",
+      "status": "approved",
+      "owner_id": "demo-track",
+      "work_type": "rail_replacement",
+      "work_sector": "S03",
+      "protected_sectors": [
+        "S03"
+      ],
+      "power_zone": "Z02",
+      "power_requirement": "OFF",
+      "phases": [
+        {
+          "name": "setup",
+          "duration_minutes": 10
+        },
+        {
+          "name": "work",
+          "duration_minutes": 30
+        },
+        {
+          "name": "test",
+          "duration_minutes": 10
+        },
+        {
+          "name": "handback",
+          "duration_minutes": 10
+        }
+      ],
+      "timing_mode": "RANGE",
+      "preferred_start": "2026-09-15T03:00:00+08:00",
+      "earliest_start": "2026-09-14T01:15:00+08:00",
+      "deadline": "2026-09-14T04:25:00+08:00",
+      "allowed_dates": [
+        "2026-09-14",
+        "2026-09-15",
+        "2026-09-16",
+        "2026-09-17",
+        "2026-09-18",
+        "2026-09-19",
+        "2026-09-20"
+      ],
+      "deferrable": false,
+      "mandatory": true,
+      "approved": false,
+      "frozen": false,
+      "existing_start": null,
+      "urgency_score": 5,
+      "priority": null,
+      "required_skill": "track",
+      "required_engineer_roles": {
+        "track": 1
+      },
+      "eligible_engineers": [
+        "E01",
+        "E02",
+        "E07"
+      ],
+      "preferred_engineer": "E02",
+      "required_equipment_ids": [],
+      "technicians_required": 0,
+      "pooled_resources": {
+        "TECH": 2
+      },
+      "depends_on": [],
+      "handover_buffer_minutes": 0,
+      "handover_buffers": {},
+      "split_allowed": false
+    },
+    {
+      "id": "R10",
+      "title": "Optional sensor inspection at Sector 05",
+      "status": "approved",
+      "owner_id": "demo-signals",
+      "work_type": "sensor_inspection",
+      "work_sector": "S05",
+      "protected_sectors": [
+        "S05"
+      ],
+      "power_zone": "Z03",
+      "power_requirement": "NONE",
+      "phases": [
+        {
+          "name": "setup",
+          "duration_minutes": 5
+        },
+        {
+          "name": "work",
+          "duration_minutes": 20
+        },
+        {
+          "name": "test",
+          "duration_minutes": 5
+        },
+        {
+          "name": "handback",
+          "duration_minutes": 10
+        }
+      ],
+      "timing_mode": "ANY_TIME",
+      "preferred_start": "2026-09-15T02:30:00+08:00",
+      "earliest_start": "2026-09-14T01:15:00+08:00",
+      "deadline": "2026-09-14T04:25:00+08:00",
+      "allowed_dates": [
+        "2026-09-14",
+        "2026-09-15",
+        "2026-09-16",
+        "2026-09-17",
+        "2026-09-18",
+        "2026-09-19",
+        "2026-09-20"
+      ],
+      "deferrable": true,
+      "mandatory": false,
+      "approved": false,
+      "frozen": false,
+      "existing_start": null,
+      "urgency_score": 2,
+      "priority": null,
+      "required_skill": "inspection",
+      "required_engineer_roles": {
+        "inspection": 1
+      },
+      "eligible_engineers": [
+        "E04",
+        "E06"
+      ],
+      "preferred_engineer": "E06",
+      "required_equipment_ids": [
+        "Q02"
+      ],
+      "technicians_required": 0,
+      "pooled_resources": {
+        "TECH": 1
+      },
+      "depends_on": [],
+      "handover_buffer_minutes": 0,
+      "handover_buffers": {},
+      "split_allowed": false
+    },
+    {
+      "id": "R11",
+      "title": "Track inspection at Sector 01",
+      "status": "submitted",
+      "owner_id": "demo-signals",
+      "work_type": "track_inspection",
+      "work_sector": "S01",
+      "protected_sectors": [
+        "S01"
+      ],
+      "power_zone": "Z01",
+      "power_requirement": "NONE",
+      "phases": [
+        {
+          "name": "setup",
+          "duration_minutes": 5
+        },
+        {
+          "name": "work",
+          "duration_minutes": 15
+        },
+        {
+          "name": "test",
+          "duration_minutes": 5
+        },
+        {
+          "name": "handback",
+          "duration_minutes": 5
+        }
+      ],
+      "timing_mode": "RANGE",
+      "preferred_start": "2026-09-16T01:30:00+08:00",
+      "earliest_start": "2026-09-14T01:15:00+08:00",
+      "deadline": "2026-09-14T04:25:00+08:00",
+      "allowed_dates": [
+        "2026-09-14",
+        "2026-09-15",
+        "2026-09-16",
+        "2026-09-17",
+        "2026-09-18",
+        "2026-09-19",
+        "2026-09-20"
+      ],
+      "deferrable": true,
+      "mandatory": false,
+      "approved": false,
+      "frozen": false,
+      "existing_start": null,
+      "urgency_score": 3,
+      "priority": null,
+      "required_skill": "inspection",
+      "required_engineer_roles": {
+        "inspection": 1
+      },
+      "eligible_engineers": [
+        "E04",
+        "E06"
+      ],
+      "preferred_engineer": "E04",
+      "required_equipment_ids": [],
+      "technicians_required": 0,
+      "pooled_resources": {
+        "TECH": 1
+      },
+      "depends_on": [],
+      "handover_buffer_minutes": 0,
+      "handover_buffers": {},
+      "split_allowed": false
+    },
+    {
+      "id": "R12",
+      "title": "Multi-date catenary service at Sector 04",
+      "status": "submitted",
+      "owner_id": "demo-signals",
+      "work_type": "catenary_service",
+      "work_sector": "S04",
+      "protected_sectors": [
+        "S04"
+      ],
+      "power_zone": "Z02",
+      "power_requirement": "OFF",
+      "phases": [
+        {
+          "name": "setup",
+          "duration_minutes": 10
+        },
+        {
+          "name": "work",
+          "duration_minutes": 30
+        },
+        {
+          "name": "test",
+          "duration_minutes": 10
+        },
+        {
+          "name": "handback",
+          "duration_minutes": 10
+        }
+      ],
+      "timing_mode": "RANGE",
+      "preferred_start": "2026-09-16T02:30:00+08:00",
+      "earliest_start": "2026-09-14T01:15:00+08:00",
+      "deadline": "2026-09-15T04:25:00+08:00",
+      "allowed_dates": [
+        "2026-09-14",
+        "2026-09-15",
+        "2026-09-16",
+        "2026-09-17",
+        "2026-09-18",
+        "2026-09-19",
+        "2026-09-20"
+      ],
+      "deferrable": true,
+      "mandatory": false,
+      "approved": false,
+      "frozen": false,
+      "existing_start": null,
+      "urgency_score": 3,
+      "priority": null,
+      "required_skill": "power",
+      "required_engineer_roles": {
+        "power": 1
+      },
+      "eligible_engineers": [
+        "E05",
+        "E06"
+      ],
+      "preferred_engineer": "E05",
+      "required_equipment_ids": [],
+      "technicians_required": 0,
+      "pooled_resources": {
+        "TECH": 2,
+        "TPO": 1
+      },
+      "depends_on": [],
+      "handover_buffer_minutes": 0,
+      "handover_buffers": {},
+      "split_allowed": false
+    }
+  ],
+  "committed_allocations": [
+    {
+      "request_id": "R01",
+      "start": "2026-09-14T01:30:00+08:00",
+      "end": "2026-09-14T02:40:00+08:00",
+      "engineer_id": "E01",
+      "equipment_ids": [
+        "Q01"
+      ],
+      "locked": true
+    },
+    {
+      "request_id": "R02",
+      "start": "2026-09-14T01:20:00+08:00",
+      "end": "2026-09-14T02:10:00+08:00",
+      "engineer_id": "E04",
+      "equipment_ids": [
+        "Q02"
+      ],
+      "locked": true
+    },
+    {
+      "request_id": "R03",
+      "start": "2026-09-14T03:00:00+08:00",
+      "end": "2026-09-14T03:50:00+08:00",
+      "engineer_id": "E03",
+      "equipment_ids": [
+        "Q03"
+      ],
+      "locked": false
+    },
+    {
+      "request_id": "R04",
+      "start": "2026-09-15T01:20:00+08:00",
+      "end": "2026-09-15T02:30:00+08:00",
+      "engineer_id": "E02",
+      "equipment_ids": [
+        "Q01"
+      ],
+      "locked": false
+    },
+    {
+      "request_id": "R05",
+      "start": "2026-09-14T02:30:00+08:00",
+      "end": "2026-09-14T03:30:00+08:00",
+      "engineer_id": "E05",
+      "equipment_ids": [
+        "Q04"
+      ],
+      "locked": false
+    },
+    {
+      "request_id": "R06",
+      "start": "2026-09-14T01:20:00+08:00",
+      "end": "2026-09-14T02:20:00+08:00",
+      "engineer_id": "E07",
+      "equipment_ids": [],
+      "locked": false
+    },
+    {
+      "request_id": "R07",
+      "start": "2026-09-15T03:00:00+08:00",
+      "end": "2026-09-15T04:00:00+08:00",
+      "engineer_id": "E03",
+      "equipment_ids": [
+        "Q03"
+      ],
+      "locked": false
+    },
+    {
+      "request_id": "R08",
+      "start": "2026-09-15T01:20:00+08:00",
+      "end": "2026-09-15T02:30:00+08:00",
+      "engineer_id": "E01",
+      "equipment_ids": [],
+      "locked": false
+    }
+  ],
+  "travel_time_matrix": {
+    "entries": [
+      {
+        "from_sector": "S01",
+        "to_sector": "S02",
+        "travel_minutes": 10
+      },
+      {
+        "from_sector": "S02",
+        "to_sector": "S01",
+        "travel_minutes": 10
+      },
+      {
+        "from_sector": "S02",
+        "to_sector": "S03",
+        "travel_minutes": 10
+      },
+      {
+        "from_sector": "S03",
+        "to_sector": "S02",
+        "travel_minutes": 10
+      },
+      {
+        "from_sector": "S02",
+        "to_sector": "S04",
+        "travel_minutes": 15
+      },
+      {
+        "from_sector": "S04",
+        "to_sector": "S02",
+        "travel_minutes": 15
+      },
+      {
+        "from_sector": "S02",
+        "to_sector": "S05",
+        "travel_minutes": 25
+      },
+      {
+        "from_sector": "S05",
+        "to_sector": "S02",
+        "travel_minutes": 25
+      },
+      {
+        "from_sector": "S02",
+        "to_sector": "S06",
+        "travel_minutes": 25
+      },
+      {
+        "from_sector": "S06",
+        "to_sector": "S02",
+        "travel_minutes": 25
+      },
+      {
+        "from_sector": "S03",
+        "to_sector": "S05",
+        "travel_minutes": 15
+      },
+      {
+        "from_sector": "S05",
+        "to_sector": "S03",
+        "travel_minutes": 15
+      },
+      {
+        "from_sector": "S01",
+        "to_sector": "S05",
+        "travel_minutes": 25
+      },
+      {
+        "from_sector": "S05",
+        "to_sector": "S01",
+        "travel_minutes": 25
+      },
+      {
+        "from_sector": "S01",
+        "to_sector": "S06",
+        "travel_minutes": 30
+      },
+      {
+        "from_sector": "S06",
+        "to_sector": "S01",
+        "travel_minutes": 30
+      }
+    ]
+  },
+  "vehicles": [
+    {
+      "id": "V01",
+      "name": "Tamping Machine 1",
+      "type": "TAMPING_MACHINE",
+      "home_depot": "CHANGI_DEPOT",
+      "availability": [
+        {
+          "start": "2026-09-14T01:15:00+08:00",
+          "end": "2026-09-14T04:45:00+08:00"
+        },
+        {
+          "start": "2026-09-15T01:15:00+08:00",
+          "end": "2026-09-15T04:45:00+08:00"
+        }
+      ],
+      "routes": [
+        {
+          "origin_depot": "CHANGI_DEPOT",
+          "destination_sector": "S02",
+          "legs": [
+            {
+              "sector_id": "S01",
+              "travel_minutes": 15
+            },
+            {
+              "sector_id": "S02",
+              "travel_minutes": 10
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "V02",
+      "name": "Inspection Train 1",
+      "type": "INSPECTION_TRAIN",
+      "home_depot": "TUAS_DEPOT",
+      "availability": [
+        {
+          "start": "2026-09-14T01:15:00+08:00",
+          "end": "2026-09-14T04:45:00+08:00"
+        },
+        {
+          "start": "2026-09-15T01:15:00+08:00",
+          "end": "2026-09-15T04:45:00+08:00"
+        }
+      ],
+      "routes": [
+        {
+          "origin_depot": "TUAS_DEPOT",
+          "destination_sector": "S05",
+          "legs": [
+            {
+              "sector_id": "S06",
+              "travel_minutes": 15
+            },
+            {
+              "sector_id": "S05",
+              "travel_minutes": 10
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "transit_schedules": [
+    {
+      "vehicle_id": "V01",
+      "sector_id": "S01",
+      "start": "2026-09-14T01:15:00+08:00",
+      "end": "2026-09-14T01:30:00+08:00"
+    }
+  ],
+  "job_catalogue": [
+    {
+      "work_type": "rail_replacement",
+      "default_duration_minutes": 70,
+      "required_engineer_roles": {
+        "track": 1
+      },
+      "pooled_resources": {
+        "TECH": 2
+      },
+      "power_requirement": "OFF",
+      "default_protection_rule": null
+    },
+    {
+      "work_type": "dynamic_signalling_test",
+      "default_duration_minutes": 50,
+      "required_engineer_roles": {
+        "signalling": 1
+      },
+      "pooled_resources": {
+        "TECH": 1
+      },
+      "power_requirement": "ON",
+      "default_protection_rule": null
+    },
+    {
+      "work_type": "sensor_inspection",
+      "default_duration_minutes": 50,
+      "required_engineer_roles": {
+        "inspection": 1
+      },
+      "pooled_resources": {
+        "TECH": 1
+      },
+      "power_requirement": "NONE",
+      "default_protection_rule": null
+    },
+    {
+      "work_type": "catenary_service",
+      "default_duration_minutes": 60,
+      "required_engineer_roles": {
+        "power": 1
+      },
+      "pooled_resources": {
+        "TECH": 2,
+        "TPO": 1
+      },
+      "power_requirement": "OFF",
+      "default_protection_rule": null
+    },
+    {
+      "work_type": "track_tamping",
+      "default_duration_minutes": 60,
+      "required_engineer_roles": {
+        "track": 1
+      },
+      "pooled_resources": {
+        "TECH": 4,
+        "TPO": 1
+      },
+      "power_requirement": "NONE",
+      "default_protection_rule": null
+    },
+    {
+      "work_type": "point_machine_service",
+      "default_duration_minutes": 60,
+      "required_engineer_roles": {
+        "signalling": 1
+      },
+      "pooled_resources": {
+        "TECH": 1
+      },
+      "power_requirement": "NONE",
+      "default_protection_rule": null
+    },
+    {
+      "work_type": "track_inspection",
+      "default_duration_minutes": 30,
+      "required_engineer_roles": {
+        "inspection": 1
+      },
+      "pooled_resources": {
+        "TECH": 1
+      },
+      "power_requirement": "NONE",
+      "default_protection_rule": null
+    }
+  ],
+  "demo_schedule": [
+    {
+      "request_id": "R01",
+      "start": "2026-09-14T01:30:00+08:00",
+      "end": "2026-09-14T02:40:00+08:00",
+      "engineer_id": "E01",
+      "equipment_ids": [
+        "Q01"
+      ],
+      "locked": true
+    },
+    {
+      "request_id": "R02",
+      "start": "2026-09-14T01:20:00+08:00",
+      "end": "2026-09-14T02:10:00+08:00",
+      "engineer_id": "E04",
+      "equipment_ids": [
+        "Q02"
+      ],
+      "locked": true
+    },
+    {
+      "request_id": "R03",
+      "start": "2026-09-14T03:00:00+08:00",
+      "end": "2026-09-14T03:50:00+08:00",
+      "engineer_id": "E03",
+      "equipment_ids": [
+        "Q03"
+      ],
+      "locked": false
+    },
+    {
+      "request_id": "R04",
+      "start": "2026-09-15T01:20:00+08:00",
+      "end": "2026-09-15T02:30:00+08:00",
+      "engineer_id": "E02",
+      "equipment_ids": [
+        "Q01"
+      ],
+      "locked": false
+    },
+    {
+      "request_id": "R05",
+      "start": "2026-09-14T02:30:00+08:00",
+      "end": "2026-09-14T03:30:00+08:00",
+      "engineer_id": "E05",
+      "equipment_ids": [
+        "Q04"
+      ],
+      "locked": false
+    },
+    {
+      "request_id": "R06",
+      "start": "2026-09-14T01:20:00+08:00",
+      "end": "2026-09-14T02:20:00+08:00",
+      "engineer_id": "E07",
+      "equipment_ids": [],
+      "locked": false
+    },
+    {
+      "request_id": "R07",
+      "start": "2026-09-15T03:00:00+08:00",
+      "end": "2026-09-15T04:00:00+08:00",
+      "engineer_id": "E03",
+      "equipment_ids": [
+        "Q03"
+      ],
+      "locked": false
+    },
+    {
+      "request_id": "R08",
+      "start": "2026-09-15T01:20:00+08:00",
+      "end": "2026-09-15T02:30:00+08:00",
+      "engineer_id": "E01",
+      "equipment_ids": [],
+      "locked": false
+    },
+    {
+      "request_id": "R09",
+      "start": "2026-09-15T03:00:00+08:00",
+      "end": "2026-09-15T04:00:00+08:00",
+      "engineer_id": "E02",
+      "equipment_ids": [],
+      "locked": false
+    },
+    {
+      "request_id": "R10",
+      "start": "2026-09-15T02:30:00+08:00",
+      "end": "2026-09-15T03:10:00+08:00",
+      "engineer_id": "E06",
+      "equipment_ids": [
+        "Q02"
+      ],
+      "locked": false
+    },
+    {
+      "request_id": "R11",
+      "start": "2026-09-16T01:30:00+08:00",
+      "end": "2026-09-16T02:00:00+08:00",
+      "engineer_id": "E04",
+      "equipment_ids": [],
+      "locked": false
+    },
+    {
+      "request_id": "R12",
+      "start": "2026-09-16T02:30:00+08:00",
+      "end": "2026-09-16T03:30:00+08:00",
+      "engineer_id": "E05",
+      "equipment_ids": [],
+      "locked": false
+    }
+  ]
+}

@@ -1,12 +1,22 @@
-import { h, time, badge } from '../lib/format.js';
-import { timeline, corridor } from '../components/timeline.js';
-import { conflictPanel } from '../components/conflicts.js';
+import { h, time, badge, duration } from '../lib/format.js';
+import { timeline, weekOverview } from '../components/timeline.js?v=20260910-demo2';
 import { proposalPanel } from '../components/proposal.js';
-import { requestTable } from './requester.js';
+
+function requestPool(state){
+  const scheduled=new Set((state.manualPlan||[]).map(a=>a.request_id));
+  const jobs=state.snapshot.requests.filter(r=>r.status==='submitted'||(['approved','scheduled'].includes(r.status)&&!scheduled.has(r.id)));
+  const selected=state.selectedPool;
+  const approved=r=>r.status!=='submitted';
+  const approvedJobs=jobs.filter(approved);
+  return `<section class="panel request-pool" data-pool-drop><div class="pool-head"><div><h2>Request pool</h2><span>${jobs.filter(r=>!approved(r)).length} Unapproved &middot; ${approvedJobs.length} Approved</span></div>${jobs.length?`<div class="pool-actions"><button class="button primary small" data-action="add-to-schedule" ${approvedJobs.length?'':'disabled'}>Add to schedule</button>${selected.size?`<div class="selection-actions"><b>${selected.size} selected</b><button class="button quiet-action" data-action="select-all-pool">Select all</button><button class="button secondary small" data-action="unapprove-selected">Unapprove</button><button class="button primary small" data-action="approve-selected">Approve</button><button class="icon-button" data-action="clear-pool-selection" aria-label="Clear selection">&times;</button></div>`:''}</div>`:''}</div><div class="pool-grid">${jobs.length?jobs.map(r=>`<article class="pool-job ${approved(r)?'approved':'submitted'}"><label class="hover-select"><input type="checkbox" data-select-pool="${h(r.id)}" ${selected.has(r.id)?'checked':''}/><span class="sr-only">Select ${h(r.id)}</span></label><div class="pool-job-top"><strong>${h(r.id)}</strong>${badge(approved(r)?'Approved':'Unapproved',approved(r)?'success':'warning')}</div><h3>${h(r.title)}</h3><div class="job-facts"><span>${h(r.work_sector)}</span><span>${duration(r)} min</span><span>${h(r.required_skill)}</span><span>${h(r.power_requirement)}</span></div></article>`).join(''):'<div class="empty compact-empty"><span class="clear-mark">&#10003;</span><strong>No requests remaining</strong></div>'}</div></section>`;
+}
 
 export function officerPage(state) {
   const s=state.snapshot;
-  return `<div class="stats-grid"><div class="stat"><span>Pending requests</span><strong>${s.requests.filter(r=>r.status==='submitted').length}</strong><small>Not yet reserved</small></div><div class="stat"><span>Committed bookings</span><strong>${s.committed_allocations.length}</strong><small>Locked in this starter</small></div><div class="stat ${state.issues.length?'stat-warning':''}"><span>Requested-plan issues</span><strong>${state.issues.length}</strong><small>Across time, space and resources</small></div><div class="stat"><span>Engineering window</span><strong class="stat-time">01:00 - 04:30</strong><small>Fictional fixture / SGT</small></div></div>${corridor(s)}<div class="workspace-grid"><div class="workspace-main">${timeline(state)}${requestTable(s)}</div><aside>${conflictPanel(state.issues)}${proposalPanel(state)}</aside></div>`;
+  const pending=s.requests.filter(r=>r.status==='submitted').length;
+  const manualLocks=(state.manualPlan||[]).filter(a=>a.locked&&!s.committed_allocations.some(c=>c.request_id===a.request_id)).length;
+  const conflictIds=new Set(state.issues.flatMap(issue=>issue.request_ids||[])),conflicts=conflictIds.size?Math.max(1,conflictIds.size-1):state.issues.length;
+  return `<div class="schedule-page">${weekOverview(state)}${timeline(state,{editable:true})}${proposalPanel(state)}${requestPool(state)}${state.issues.length?`<div class="conflict-toast"><b>!</b><span>${conflicts} schedule conflict${conflicts===1?'':'s'}</span></div>`:''}</div>`;
 }
 
 export function resourcesPage(state) {

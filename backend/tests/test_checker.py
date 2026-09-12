@@ -2,6 +2,14 @@ from copy import deepcopy
 from backend.app.services.checker import check_plan, unary_issues
 from backend.app.services.common import preferred_plan, make_allocation
 from backend.app.services.demo_search import solve
+import pytest
+
+
+@pytest.fixture(autouse=True)
+def approve_seed_work(snapshot):
+    for request in snapshot['requests']:
+        if request['status']=='submitted':
+            request['status']='approved'
 
 
 def codes(problems):

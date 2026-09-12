@@ -1,4 +1,4 @@
-# API contract v0.1
+# API contract v0.2
 
 Base path: `/api`. Frontend uses same-origin fetch. No CORS configuration or direct SQLite access is required for this single-server starter.
 
@@ -14,8 +14,12 @@ In demo mode use `X-Demo-User: demo-track`, `demo-signals` or `demo-officer`. Th
 | `GET /planning-snapshot` | Signed in | Current data; requesters get only their own requests and allocations plus anonymised occupancy |
 | `POST /requests` | Requester | Validate/store a request; server sets ownership/status and eligible engineers |
 | `POST /requests/{id}/cancel` | Owning requester | Withdraw an unbooked request if no active dependent request blocks withdrawal |
+| `PATCH /requests/approval` | Officer | Mass approve or return unscheduled requests to requested state |
+| `PATCH /allocations/locks` | Officer | Persistently lock or unlock published schedule allocations |
 | `POST /conflicts/check` | Officer | Check requested positions combined with current bookings |
-| `POST /schedule/proposals` | Officer | Calculate one plan for all active work; no publication |
+| `POST /schedule/check` | Officer | Validate the complete set of positions from the manual scheduling board |
+| `POST /schedule/proposals` | Officer | Calculate one plan for all active work while preserving supplied locks; no publication |
+| `POST /schedule/manual-proposals` | Officer | Independently check and stage the officer's manual plan for approval; unlocked committed jobs may be omitted to return them to the approved pool on publish |
 | `GET /proposals` | Officer | Last ten stored feasible proposals |
 | `POST /proposals/{id}/commit` | Officer | Approve and publish that exact version atomically |
 | `PATCH /resources` | Officer | Add an unavailable interval or change equipment serviceability |
@@ -31,12 +35,13 @@ Do not send `owner_id`, `role`, `status`, `eligible_engineers`, `power_zone` or 
 ```json
 {
   "title": "Inspection request",
-  "work_sector": "S04",
-  "protected_sectors": ["S03", "S04"],
-  "power_requirement": "OFF",
-  "required_skill": "inspection",
-  "preferred_engineer": "E02",
-  "required_equipment_ids": ["Q02"],
+  "work_type": "dynamic_signalling_test",
+  "work_sector": "S02",
+  "protected_sectors": ["S02"],
+  "power_requirement": "ON",
+  "required_skill": "signalling",
+  "preferred_engineer": "E03",
+  "required_equipment_ids": ["Q03"],
   "technicians_required": 1,
   "phases": [
     {"name": "setup", "duration_minutes": 10},
@@ -45,16 +50,16 @@ Do not send `owner_id`, `role`, `status`, `eligible_engineers`, `power_zone` or 
     {"name": "handback", "duration_minutes": 10}
   ],
   "preferred_start": "2026-09-14T02:30:00+08:00",
-  "earliest_start": "2026-09-14T01:00:00+08:00",
-  "deadline": "2026-09-15T04:30:00+08:00",
+  "earliest_start": "2026-09-14T01:15:00+08:00",
+  "deadline": "2026-09-15T04:25:00+08:00",
   "allowed_dates": ["2026-09-14", "2026-09-15"],
   "depends_on": []
 }
 ```
 
-The work sector must be included in the protection footprint. Times must include a timezone. Existing referenced IDs must be valid. Date choices must come from the seeded calendar. New requester-defined dependencies can refer to their own active requests. The initial operator-style fixture has a cross-team dependency created by seed data.
+The work sector must be included in the protection footprint. Times must include a timezone. Existing referenced IDs must be valid. Date choices must come from the seeded calendar. New requester-defined dependencies can refer to their own active requests. When a job catalogue is present, `work_type` is required and the backend derives its standard role requirements, traction-power requirement and pooled resources from that catalogue.
 
-`power_requirement` accepts `"ON"`, `"OFF"`, or `"NONE"`. (Legacy input `"ANY"` is automatically normalized to `"NONE"` for backward compatibility). Requests also support `timing_mode` (`"EXACT"`, `"RANGE"`, `"ANY_TIME"`) and deferral eligibility `deferrable: bool` ($D_j^{allow}$).
+`power_requirement` accepts `"ON"`, `"OFF"`, or `"NONE"`. Legacy `"ANY"` remains accepted only for the scaffold fixture and is normalized to `"NONE"`. The current requester endpoint creates a movable `RANGE`, deferrable, non-mandatory request. Mandatory state is planner-controlled rather than requester-declared.
 
 The API can accept a request whose desired time conflicts. That is the point of the request queue; schema validation is not the same as allocating a feasible slot.
 
@@ -97,11 +102,21 @@ The message is generated from rules/data, not an LLM.
   "id": "P-example",
   "planning_version": 1,
   "status_workflow": "draft",
-  "status": "FEASIBLE",
+  "status": "OPTIMAL",
   "engine": "cp_sat",
+  "solver_version": "full",
+  "planning_date": "2026-09-14",
+  "strict_status": "INFEASIBLE",
+  "recovery_status": "OPTIMAL",
+  "mode": "recovery",
+  "recovery_partial": true,
   "elapsed_seconds": 0.5,
-  "message": "All active jobs allocated under the demo constraints. Officer approval is still required.",
+  "message": "Strict scheduling was proven infeasible. This is the best valid partial schedule under the recovery objective hierarchy.",
+  "objective_components": {},
+  "validation": {"valid": true, "constraint_results": []},
   "allocations": [],
+  "schedule_details": [],
+  "deferred_requests": [],
   "changes": []
 }
 ```
@@ -121,13 +136,41 @@ An allocation contains:
 }
 ```
 
+For manual checking and staging, send each active allocation as `request_id`, `start`, `engineer_id` and `locked`. The server derives the end time and exact equipment requirement rather than trusting them from the browser. A manual check returns all structured issues without storing a proposal. A valid manual proposal can use the existing publish route.
+
+The solver route optionally accepts locks:
+
+```json
+{
+  "locked_allocations": [
+    {"request_id": "R03", "start": "2026-09-14T02:55:00+08:00", "engineer_id": "E03", "locked": true}
+  ]
+}
+```
+
+Canonical planning may lock submitted draft, approved or scheduled work because draft work is a movable formulation input. The scaffold engine retains its approved/scheduled gate. Published allocations marked `locked` are fixed; published unlocked allocations may be reshuffled.
+
+## Approval and lock workflow
+
+New requester work starts as `submitted`. Officers can mass-change unscheduled requests between `submitted` and `approved`:
+
+```json
+{"request_ids": ["R03", "R04"], "approved": true}
+```
+
+The canonical full solver selects all non-cancelled requests permitted on the planning night. Here, workflow status `approved` means the officer has moved a draft into the manual-planning pool; the separate domain Boolean `approved` represents an existing booking commitment. Publication changes allocated work to `scheduled`. Published allocations retain an independent `locked` flag, which officers can change in bulk:
+
+```json
+{"request_ids": ["R01", "R02"], "locked": false}
+```
+
 ## Publish
 
 ```json
 {"expected_version": 1}
 ```
 
-The server verifies role, proposal state, exact current revision and the complete plan within a write transaction. It saves all allocations, updates request states, increments the revision and appends an audit record together. A stale or invalid plan gets `409` without a partial write.
+The server verifies role, proposal state, exact current revision and the complete plan within a write transaction. Canonical automatic and manual proposals are independently checked against all nine constraints again. It saves all allocations, updates request states, increments the revision and appends an audit record together. A stale or invalid plan gets `409` without a partial write.
 
 Generating a proposal or appending an audit event does not change planning availability. Requests, resource updates, reset and actual publication do change the planning revision.
 

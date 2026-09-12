@@ -20,7 +20,7 @@ def module_url(path):
  return url
 entry=module_url(ROOT/'frontend/src/app.js')
 with tempfile.TemporaryDirectory() as temp:
- settings=Settings(_env_file=None,app_env='test',auth_mode='demo',solver_engine='demo_search',database_path=temp+'/ui.sqlite3')
+ settings=Settings(_env_file=None,app_env='test',auth_mode='demo',solver_engine='demo_search',database_path=temp+'/ui.sqlite3',dataset_path=str(ROOT/'data'/'demo_data.json'))
  with TestClient(create_app(settings)) as client, sync_playwright() as p:
   options = {'headless': True}
   if os.getenv('CHROMIUM_EXECUTABLE'): options['executable_path'] = os.environ['CHROMIUM_EXECUTABLE']

@@ -61,12 +61,12 @@ def check_plan(snapshot: dict, allocations: list[dict], require_all=False) -> li
     if unknown:
         return [issue("UNKNOWN_REQUEST", list(unknown), "Plan references unknown requests.")]
     if require_all:
-        missing = {r["id"] for r in requests.values() if r["status"] in ("submitted", "scheduled")} - set(selected)
+        missing = {r["id"] for r in requests.values() if r["status"] in ("approved", "scheduled")} - set(selected)
         if missing:
             problems.append(issue("MISSING_WORK", list(missing), "This starter schedules all active requests; work cannot be silently dropped."))
     for old in snapshot["committed_allocations"]:
         new = selected.get(old["request_id"])
-        keys = ["start", "end", "engineer_id", "equipment_ids"]
+        keys = ["start", "end", "engineer_id", "equipment_ids", "locked"]
         if old.get("locked") and (new is None or any(new[k] != old[k] for k in keys)):
             problems.append(issue("LOCKED_BOOKING", [old["request_id"]], "An existing locked booking was changed or removed."))
     for a in allocations:

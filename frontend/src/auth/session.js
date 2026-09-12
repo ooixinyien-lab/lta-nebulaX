@@ -5,6 +5,7 @@
 let config;
 let session = null;
 let refreshing = null;
+export function isUiDemo() { return config?.ui_demo === true; }
 export async function loadConfig() {
   const response = await fetch('/api/config');
   if (!response.ok) throw new Error('Cannot reach the backend. Start the Python server first.');

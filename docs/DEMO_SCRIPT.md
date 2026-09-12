@@ -1,37 +1,66 @@
-# Five-minute team demonstration
+# Five-minute canonical solver demonstration
 
-All timings, jobs, sectors and safety-related assumptions in this demo are fictional.
+All jobs, resources, locations and operational rules in this demonstration are
+synthetic.
 
-## 1. Establish the workflow
+## 1. Establish the source of truth
 
-Open the local website. Show the three demo profile buttons: two maintenance-team requesters and one officer. Explain that these are deliberately simulated identities; actual Supabase Auth is optional and separately configured.
+Show `constraints_lp_setup.md` and explain that it contains the nine approved
+constraint families. Show that `scripts/generate_synthetic_dataset.py`
+generates `data/comprehensive_synthetic_data.json`; `demo_data.json` belongs
+only to the original scaffold.
 
-Sign in as **Planning officer**. Show the two pending requests and two locked bookings.
+## 2. Compare the learning versions
 
-## 2. Explain one hidden conflict
+Run V0. It uses complete durations, the usable engineering window and frozen
+starts, but it permits conflicts not yet taught in that version.
 
-R01 works in S02 while R03 wants S01. The work sectors differ, but the jobs have opposite requirements for their shared power zone Z01. The conflict panel also shows R04's engineer/equipment conflict and pooled manpower shortage.
+Run V1. Compared with V0, it adds dependency/handover ordering and opposed
+traction-power separation. It still is not the complete scheduler.
 
-Do not say that these are verified operator rules. They are synthetic model rules designed to show a mechanism.
+Run the canonical solver:
 
-## 3. Calculate a plan
+```sh
+python -m backend.app.services.cp_sat --planning-date 2026-09-14 --time-limit 8
+```
 
-Click **Generate proposal**. Point to the engine label: the default is tiny-demo search, not CP-SAT. When CP-SAT has been installed and enabled, its name will be shown instead.
+## 3. Explain strict and recovery results
 
-Show R03 at 02:30 and R04 at 02:35. Switch timeline views. R04's S03 protection row is not a duplicate job. The proposal has not yet booked anything.
+The canonical dataset proves strict mode `INFEASIBLE`: all selected work cannot
+coexist while every hard rule remains enforced. Recovery then returns
+`OPTIMAL`, meaning the best valid partial schedule under its documented
+sequential objectives—not a universally best railway plan.
 
-## 4. Change something live
+Point out:
 
-Before publishing, open **Resources & activity** and mark E01 unavailable after 02:20. Return to planning. The old proposal is stale and cannot be committed.
+- seven scheduled requests and five explicitly deferred requests;
+- mandatory R09 remains scheduled;
+- locked R01 remains at 01:30;
+- R05 is deferred because its exact required equipment Q04 is unserviceable;
+- the other deferred explanations correctly say that no single cause was
+  proved when the global constraint combination was decisive.
 
-Generate a fresh proposal. R04 can use qualified E04 while respecting Q01's transfer allowance. The answer changed because an input changed, not because the frontend moved a fixed animation.
+## 4. Show independent validation and objectives
 
-## 5. Approve and view as requester
+The output contains nine separate validation passes. Explain that the
+validator recalculates the rules from exported timestamps and assignments; it
+does not inspect CP-SAT's internal variables.
 
-Approve and publish the updated proposal. Sign out and choose **Track team**. The requester sees its own allocations. Other work is anonymous occupancy. Submit a new request and refresh to show persistence.
+Show the recovery objective stages in order: scheduled urgency, scheduled
+count, moved-allocation count, movement minutes, non-null preference deviation
+and latest completion. Each stage reports a value, best bound and gap.
 
-No real engineering access has been granted. This demo is planning support only.
+## 5. Demonstrate the application workflow
 
-## Recovery before presenting again
+Start the local app, choose **Planning officer**, and click **Generate
+proposal**. The frontend calls the configured CP-SAT API and displays strict
+and recovery statuses plus deferred requests. Publishing repeats independent
+validation within the database transaction.
 
-The demo officer can use **Reset synthetic demo**. That deletes local edits/proposals and reloads the fixture. Do not use reset as a production workflow. It is disabled in Supabase mode.
+Changing a resource increments the planning revision, so an older proposal is
+rejected as stale. A deliberately invalid or tampered proposal is rejected
+without partial publication.
+
+End by stating that neither solver optimality nor officer publication grants
+real engineering access. This prototype has no live railway-system
+integration.

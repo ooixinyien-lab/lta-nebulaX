@@ -11,12 +11,12 @@ from .api.routes import router
 
 def create_app(settings: Settings | None = None):
     settings = settings or Settings()
-    db = Database(settings.database_path)
+    db = Database(settings.database_path, settings.dataset_path)
     @asynccontextmanager
     async def lifespan(app):
         db.initialize()
         yield
-    app = FastAPI(title="RailPlan starter API", version="0.1.0", lifespan=lifespan)
+    app = FastAPI(title="NebulaX scheduling API", version="0.2.0", lifespan=lifespan)
     app.state.settings = settings
     app.state.db = db
 

@@ -597,7 +597,18 @@ def test_15_allocation_validation_against_snapshot(raw_fixture):
 # -----------------------------------------------------------------------------
 
 def test_16_conflict_model_validates_checker_issues(raw_fixture):
-    issues = check_plan(raw_fixture, preferred_plan(raw_fixture), require_all=True)
+    # The seed's committed bookings are valid by themselves. Activate its
+    # pending scaffold requests so this test continues to exercise conversion
+    # of real checker failures into typed Conflict records.
+    active_fixture = deepcopy(raw_fixture)
+    for request in active_fixture["requests"]:
+        if request["status"] == "submitted":
+            request["status"] = "approved"
+    issues = check_plan(
+        active_fixture,
+        preferred_plan(active_fixture),
+        require_all=True,
+    )
     assert len(issues) > 0
     for issue_dict in issues:
         conflict = Conflict.model_validate(issue_dict)

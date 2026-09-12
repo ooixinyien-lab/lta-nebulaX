@@ -7,11 +7,12 @@ from datetime import datetime, timezone
 from pathlib import Path
 import json
 import sqlite3
-from .config import ROOT
-
 class Database:
-    def __init__(self, path: str):
+    """Store application state, seeding new databases from a chosen snapshot."""
+
+    def __init__(self, path: str, dataset_path: str):
         self.path = str(Path(path).resolve())
+        self.dataset_path = str(Path(dataset_path).resolve())
         Path(self.path).parent.mkdir(parents=True, exist_ok=True)
 
     @contextmanager
@@ -43,9 +44,10 @@ class Database:
                 self.seed(c)
 
     def seed(self, c):
+        """Replace application state with the configured synthetic snapshot."""
         old = c.execute("SELECT revision FROM meta WHERE id=1").fetchone()
         revision = old[0] + 1 if old else 1
-        fixture = json.loads((ROOT / "data" / "demo_data.json").read_text())
+        fixture = json.loads(Path(self.dataset_path).read_text(encoding="utf-8"))
         requests = fixture.pop("requests")
         allocations = fixture.pop("committed_allocations")
         for table in ["allocations", "requests", "proposals", "audit", "meta"]:
@@ -55,7 +57,7 @@ class Database:
             c.execute("INSERT INTO requests VALUES (?, ?, ?)", (r["id"], r["owner_id"], json.dumps(r)))
         for a in allocations:
             c.execute("INSERT INTO allocations VALUES (?, ?)", (a["request_id"], json.dumps(a)))
-        self.audit(c, "system", "demo_seed", "Synthetic fixture loaded")
+        self.audit(c, "system", "synthetic_seed", f"Loaded {Path(self.dataset_path).name}")
 
     def snapshot(self, c=None):
         if c is None:

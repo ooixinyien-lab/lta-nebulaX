@@ -1,8 +1,8 @@
 # Source and design notes
 
-The prior `Rail_Scheduler_Blueprint_and_Demo_Data.zip` in this conversation provided the fictional corridor and four-request scenario. The dataset here retains those operational assumptions, with ownership assigned to the new demo profiles.
+The earlier four-request scenario survives only as `data/demo_data.json` for scaffold-specific tests. The current synthetic source of truth is `scripts/generate_synthetic_dataset.py`, which produces `data/comprehensive_synthetic_data.json` according to `constraints_lp_setup.md`.
 
-This repository is newly written implementation code. The earlier README was a blueprint, not an executable application. In particular, this starter deliberately changes the frontend to a no-build native-JavaScript website and starts with a small dependency-free search engine. It implements one proposal and one officer approval, not the entire earlier extension roadmap.
+The native-JavaScript frontend and small dependency-free search remain from that scaffold. The canonical scheduling path is now the full CP-SAT solver plus an independent nine-constraint validator.
 
 No public source establishes the correctness of the invented railway rules. The following official sources support software mechanisms only:
 

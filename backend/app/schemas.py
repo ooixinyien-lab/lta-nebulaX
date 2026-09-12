@@ -20,9 +20,10 @@ class Phase(StrictModel):
 
 class RequestCreate(StrictModel):
     title: str = Field(min_length=3, max_length=100)
+    work_type: str | None = None
     work_sector: str
     protected_sectors: list[str] = Field(min_length=1, max_length=6)
-    power_requirement: Literal["ON", "OFF", "ANY"]
+    power_requirement: Literal["ON", "OFF", "NONE", "ANY"]
     required_skill: str
     preferred_engineer: str | None = None
     required_equipment_ids: list[str] = Field(default_factory=list, max_length=3)

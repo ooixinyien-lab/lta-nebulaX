@@ -47,7 +47,8 @@ AUTH_MODE=supabase
 SUPABASE_URL=https://YOUR_PROJECT_REFERENCE.supabase.co
 SUPABASE_PUBLISHABLE_KEY=sb_publishable_YOUR_PUBLIC_KEY
 OFFICER_USER_IDS=THE_OFFICER_USER_UUID
-SOLVER_ENGINE=demo_search
+SOLVER_ENGINE=cp_sat
+DATASET_PATH=./data/comprehensive_synthetic_data.json
 ```
 
 For multiple officers, use comma-separated UUIDs. Everyone else authenticated to the configured project is treated as a requester, so restrict project membership/signup as appropriate.

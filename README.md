@@ -1,6 +1,6 @@
-# RailPlan: your team's starting codebase
+# NebulaX railway engineering-work scheduler
 
-**A small, runnable maintenance-scheduling web app, with a requester portal and an officer workspace.** This is a team starter, not a finished railway product.
+**A runnable synthetic maintenance-scheduling prototype with a requester portal, an officer workspace and a canonical Google OR-Tools CP-SAT solver.** This is not a live railway product.
 
 ![Officer workspace](docs/screenshots/02-officer.png)
 
@@ -17,20 +17,20 @@ The API enforces these permissions; hiding a button is not the permission check.
 
 The earlier proposal used React/Vite. This starter instead uses **plain HTML, CSS and native JavaScript modules**, served by FastAPI. There is **no Node installation, npm install, frontend build step or second server required**. The frontend is still separated from the backend by HTTP APIs. Your frontend teammate can replace it with React later without replacing the solver or database.
 
-The initial solver is a real, small **enumerative demo search**, clearly labelled in the UI. A separate **OR-Tools CP-SAT implementation** is included and can be enabled after installation. There is no silent fallback and no hard-coded schedule answer.
+The canonical solver is the **OR-Tools CP-SAT implementation**. The original small enumerative demo search remains as a scaffold and learning artifact. There is no silent fallback and no hard-coded schedule answer.
 
 ## 1. Run it on your laptop
 
 Use **Python 3.12** for the most straightforward team setup. The build environment used Python 3.13.5; this repository has not been verified on every Python/OS combination.
 
-Unzip the folder, open **the `railplan-starter` folder** in VS Code, then open its terminal. The terminal's current directory must contain this README and `requirements.txt`.
+Open the **NebulaX repository** in VS Code, then open its terminal. The terminal's current directory must contain this README and `requirements.txt`.
 
 ### macOS / Linux
 
 ```sh
 python3 -m venv .venv
 source .venv/bin/activate
-python -m pip install -r requirements.txt
+python -m pip install -r requirements-cpsat.txt
 cp .env.example .env
 python -m uvicorn backend.app.main:app --reload --host 127.0.0.1 --port 8000
 ```
@@ -39,7 +39,7 @@ python -m uvicorn backend.app.main:app --reload --host 127.0.0.1 --port 8000
 
 ```powershell
 py -3.12 -m venv .venv
-.\.venv\Scripts\python.exe -m pip install -r requirements.txt
+.\.venv\Scripts\python.exe -m pip install -r requirements-cpsat.txt
 Copy-Item .env.example .env
 .\.venv\Scripts\python.exe -m uvicorn backend.app.main:app --reload --host 127.0.0.1 --port 8000
 ```
@@ -54,22 +54,22 @@ Leave the terminal running while you use the app. Press `Ctrl+C` to stop it. Aft
 
 ## 2. Try the whole workflow
 
-1. Choose **Planning officer**. The initial fixture has two committed bookings and two pending requests. The officer sees five rule violations in the requested plan.
-2. Click **Generate proposal**. The demo solver calculates new start times and engineer assignments. Nothing is booked yet.
-3. Compare the **Requested** and **Proposed** timeline views. R03 can move to 02:30 and R04 to 02:35 under the synthetic rules. S03 shows R04's additional protection footprint, not a second job.
+1. Choose **Planning officer**. A fresh canonical database contains the 12 comprehensive synthetic requests.
+2. Click **Generate proposal**. The full solver first attempts a complete strict schedule, then runs recovery only if strict infeasibility is proved. Nothing is booked yet.
+3. Review the returned status, scheduled work and clearly separated deferred requests. The canonical 14 September night currently proves strict infeasibility and returns an independently validated seven-request recovery plan.
 4. Click **Approve & publish**, then accept the confirmation. The server rechecks the current revision and writes all bookings in a transaction.
 5. Sign out. Choose **Track team**. The requester sees only that team's requests and its newly scheduled work. Other teams' track occupation is shown only as `Reserved`.
 6. Choose **New request**, submit a work package, and refresh. The request persists, but it does not become a track reservation until published by the officer.
 
-For a second demonstration, reset as the officer, generate a proposal, then go to **Resources & activity** and click **Demo: E01 unavailable after 02:20**. The old proposal is stale. Recalculate; R04 can use eligible E04 instead. If you invalidate a resource required by an already locked booking, the engine requests review rather than silently changing that booking.
+For a second demonstration, generate a proposal and then change a resource's availability. The old proposal becomes stale and cannot be committed. If a required locked resource becomes invalid, the solver reports infeasibility or an input problem instead of silently changing the frozen booking.
 
-The fixture calendar is **14-20 September 2026**, not today's live railway calendar. Choose a seeded date in the UI.
+The canonical fixture covers **14-15 September 2026**, not today's live railway calendar. Choose a seeded date in the UI.
 
 ## 3. Where your teammates work
 
 | Workstream | Main files | What that person owns |
 |---|---|---|
-| Data / domain model | `backend/app/models.py`, `data/demo_data.json` | Typed Pydantic v2 domain models (CP-SAT formulation, vehicles, blackouts, rules, snapshots) |
+| Data / domain model | `backend/app/models.py`, `scripts/generate_synthetic_dataset.py`, `data/comprehensive_synthetic_data.json` | Typed Pydantic v2 domain models and generated canonical synthetic data |
 | Requester frontend | `frontend/src/pages/requester.js` | Form, request list, status and validation presentation |
 | Officer frontend | `frontend/src/pages/officer.js`, `frontend/src/components/` | Timeline, conflict panel, proposal review, resource UI |
 | Backend / rules | `backend/app/api/routes.py`, `database.py`, `services/checker.py` | APIs, persistence, permissions at routes, conflict rules, atomic publication |
@@ -97,12 +97,12 @@ FastAPI: backend/app/api/routes.py
        |
        +--> scheduler.py
                |
-               +--> demo_search.py   small teaching solver
+               +--> demo_search.py   starter learning solver
                OR
-               +--> cp_sat.py        OR-Tools implementation
+               +--> cp_sat.py        canonical OR-Tools implementation
                          |
                          v
-                  checker revalidation
+                  full_validator.py: independent nine-rule validation
                          |
                          v
               proposal -> officer approval -> database commit
@@ -113,11 +113,11 @@ The frontend **does not** calculate authoritative scheduling rules or write the 
 ## 5. Folder map
 
 ```text
-railplan-starter/
+nebulaX/
   README.md
   .env.example                 configuration template; not actual secrets
-  requirements.txt             initial local demo dependencies
-  requirements-cpsat.txt       add OR-Tools
+  requirements.txt             core application dependencies
+  requirements-cpsat.txt       core dependencies plus OR-Tools
   requirements-dev.txt         backend tests including CP-SAT tests
   frontend/
     index.html
@@ -147,36 +147,36 @@ railplan-starter/
         checker.py             rule evaluation without solver/DB imports
         candidates.py          small finite candidate domains
         demo_search.py         explicit six-pending-job teaching solver
-        cp_sat.py              CP-SAT model
+        cp_sat.py              canonical strict/recovery CP-SAT model
+        full_validator.py      independent nine-constraint result validator
         scheduler.py           stable solver interface + output recheck
     tests/                     automated tests
   data/
-    demo_data.json             fictional inputs; seeds the DB once
-    reference_expected_results.json   human/test reference, never a solver input
+    comprehensive_synthetic_data.json generated canonical mock inputs
+    demo_data.json             outdated scaffold fixture retained for its tests
+    solver_v0.py               basic time/window learning model
+    solver_v1.py               V0 plus dependency and power learning model
+    reference_expected_results.json   executed regression reference, never solver input
   docs/                        handoff, API, auth, solver and testing guides
   scripts/                     launch and optional browser-check utilities
   .github/workflows/tests.yml  CI configuration for your eventual GitHub repo
 ```
 
-## 6. Enable CP-SAT
+## 6. Run the canonical solver directly
 
 From your activated environment:
 
 ```sh
-python -m pip install -r requirements-cpsat.txt
+python -m backend.app.services.cp_sat --planning-date 2026-09-14 --time-limit 8
 ```
 
-Change **one line** in `.env`:
+For structured JSON output:
 
-```dotenv
-SOLVER_ENGINE=cp_sat
+```sh
+python -m backend.app.services.cp_sat --planning-date 2026-09-14 --time-limit 8 --json
 ```
 
-Stop and restart the Python server. Python-file hot reload is not a dependable way to reload environment configuration.
-
-Then run the same UI workflow. The engine label must say **OR-Tools CP-SAT**. When the dependency is missing, the backend returns `UNAVAILABLE`; it does not label the demo search as CP-SAT.
-
-The included model uses finite start/engineer candidate pairs, intervals, exclusive-use constraints, conditional separation, power guards, dependencies and pooled technician capacity. All existing bookings are fixed. All pending jobs are mandatory. It currently produces **one** plan per call.
+The command requires an explicit planning night. The solver reports strict and recovery statuses separately, each lexicographic objective stage, independent validation, scheduled requests, deferred requests and prototype limitations.
 
 Read [docs/SOLVER.md](docs/SOLVER.md) for the exact model and extension points.
 
@@ -194,11 +194,11 @@ Read [docs/SUPABASE.md](docs/SUPABASE.md). It covers project configuration, offi
 
 **Working in the tested demo:** separate role views; ownership filtering; request submission/withdrawal; officer mass approval; persistent records; seven-night utilization overview; full-screen manual scheduling with five-minute drag placement; immediate visual conflict rechecking; bulk persistent job locks; unlocked-booking reshuffling; a real small-demo search; manual and generated proposal preview; single-officer publication; revision-based stale-plan rejection; atomic writes; resource updates; demo reset; audit records.
 
-**Domain model and data classes (implemented in `backend/app/models.py`):** Typed Pydantic v2 data classes covering all mathematical entities from `constraints & LP setup.md`: the 9 hard constraints (engineering window with handback margin $B$, sector unavailabilities $\mathcal{B}_s$ and exclusive safety footprints, work/power compatibility with $P_j \in \{\text{ON}, \text{OFF}, \text{NONE}\}$, specialist engineer competencies and pooled resource capacities $C_r$, transfer travel times $\tau^E$, dependencies with handover buffers $\Delta_{pj}$, booking commitment and freeze horizon $H^{freeze}$, timing flexibility modes with deferral flags $D_j^{allow}$, and service-critical mandatory work $M_j$), engineering vehicles ($\mathcal{V}$), transit corridors ($I_{v,s}$, $\tau_{v,s}$), conflicts, and unified planning snapshots.
+**Domain model and data classes (implemented in `backend/app/models.py`):** Typed Pydantic v2 data classes covering all mathematical entities from `constraints_lp_setup.md`: the 9 hard constraints (engineering window with handback margin $B$, sector unavailabilities $\mathcal{B}_s$ and exclusive safety footprints, work/power compatibility with $P_j \in \{\text{ON}, \text{OFF}, \text{NONE}\}$, specialist engineer competencies and pooled resource capacities $C_r$, transfer travel times $\tau^E$, dependencies with handover buffers $\Delta_{pj}$, booking commitment and freeze horizon $H^{freeze}$, timing flexibility modes with deferral flags $D_j^{allow}$, and service-critical mandatory work $M_j$), engineering vehicles ($\mathcal{V}$), transit corridors ($I_{v,s}$, $\tau_{v,s}$), conflicts, and unified planning snapshots.
 
-**Implemented but not executed against the real service/dependency in the build environment:** the CP-SAT model, and real Supabase sign-in/identity verification. Their tests/configuration are included. See the test report.
+**Implemented and executed locally:** strict and recovery CP-SAT modes, all nine documented constraints, sequential objectives, deterministic settings, comprehensive-data loading, an independent nine-rule validator, API proposal generation and repeat validation before commit.
 
-**Not implemented in solver engine yet:** solver-side vehicle route scheduling; multiple distinct alternatives in one solve; movable approved bookings; optional/urgent work prioritisation; a general operator work-compatibility matrix beyond exclusive footprints and power rules; phase-specific resource/power states; shared possessions; automatic requester approvals; actual TAMS/MOMS integrations; live updates without refresh; notifications; production deployment hardening.
+**Not implemented in the solver engine:** choosing new vehicle routes or assignments when a request contains no vehicle-demand field; multiple alternative proposals in one solve; phase-specific resource/power states; external railway system integrations; production deployment hardening.
 
 All jobs are complete, unsplittable work packages. One lead engineer and the specified equipment are reserved for the entire package. The technician pool is interchangeable capacity, not individually routed people. The first resource arrival is assumed possible. A flat 15-minute inter-site transfer and 10-minute opposed-power guard are fictional examples, not operating instructions.
 
@@ -209,7 +209,7 @@ python -m pip install -r requirements-dev.txt
 python -m pytest -q
 ```
 
-For just the lightweight mode, install `requirements.txt` and `pytest`, then run the same command; CP-SAT-specific tests are explicitly skipped if OR-Tools is missing.
+For the complete suite, use `requirements-dev.txt`; it includes OR-Tools and pytest.
 
 Optional JavaScript syntax check (requires Node, not needed to run the app):
 
@@ -224,12 +224,13 @@ See [docs/TEST_REPORT.md](docs/TEST_REPORT.md) for what was actually tested befo
 | Symptom | Check |
 |---|---|
 | `No module named backend` | Run commands from the repository root, not from inside `backend/`. |
-| `No module named uvicorn` | Use the `.venv` interpreter and install `requirements.txt`. |
+| `No module named uvicorn` | Use the `.venv` interpreter and install `requirements-cpsat.txt`. |
 | Browser cannot connect | Keep the server terminal running and open `http://127.0.0.1:8000`, not port 5173. |
 | Solver says `UNAVAILABLE` | Install `requirements-cpsat.txt`, or explicitly select `demo_search` for the tiny fixture. |
-| Solver says `LIMIT` | Demo search accepts at most six pending jobs; CP-SAT starter has a 40-active-job cap. |
+| Solver says `INPUT_ERROR` | Read the field/request identifier in the message; canonical data is validated before model construction. |
 | Supabase requester sees no seed jobs | Seed jobs belong to fictional demo owners. A real requester starts by submitting their own job. Officers see all seed jobs. |
-| Editing `data/demo_data.json` changes nothing | It seeds only at first startup. Use officer demo reset to reload it. Reset deletes demo edits and proposals. |
+| Editing generated JSON is overwritten | Change `scripts/generate_synthetic_dataset.py`, then regenerate `data/comprehensive_synthetic_data.json`. |
+| Existing app still shows starter data | Use the new `backend/nebulax.sqlite3` path or officer reset. Reset deletes local edits and proposals. |
 | Old proposal cannot publish | A request, resource or booking changed. Generate a fresh proposal. |
 | Resource outage makes planning impossible | A locked booking may now be invalid. The starter will not silently move it. |
 | Sign-in disappears on refresh in Supabase mode | Tokens are intentionally memory-only in this basic adapter; sign in again. |

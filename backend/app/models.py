@@ -111,6 +111,7 @@ class TimingMode(str, Enum):
 
 class RequestStatus(str, Enum):
     submitted = "submitted"
+    approved = "approved"
     scheduled = "scheduled"
     cancelled = "cancelled"
 

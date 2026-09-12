@@ -1,101 +1,161 @@
-# Optimisation teammate: your starting point
+# NebulaX solver handover
 
-## Stable interface
+## Authoritative inputs
 
-```python
-result = solve(snapshot, time_limit=8)
+The canonical implementation is `backend/app/services/cp_sat.py`. It uses:
+
+- `constraints_lp_setup.md` for the nine approved constraint families;
+- `data/comprehensive_synthetic_data.json` for the canonical mock data;
+- `scripts/generate_synthetic_dataset.py` as the source that generates that JSON;
+- `backend/app/services/full_validator.py` for independent post-solve checking.
+
+All inputs are synthetic. A solver result is a prototype planning aid and is
+not approval for live railway operations.
+
+## Educational version progression
+
+| Version | Purpose | Difference from the preceding version |
+|---|---|---|
+| V0 | Basic integer start/end variables, full job duration, engineering-window containment and frozen starts | Starting model |
+| V1 | Dependency/handover ordering and opposed traction-power separation | Adds sequencing and power state to V0; it does not implement all nine rules |
+| Full | Canonical strict/recovery scheduler and independent validation | Adds every approved constraint, named and pooled resources, lexicographic objectives, controlled statuses and backend integration |
+
+V0 and V1 remain separate learning artifacts in `data/solver_v0.py` and
+`data/solver_v1.py`. They should not be expanded until they become duplicate
+copies of the full solver.
+
+## CP-SAT syntax used in the full solver
+
+CP-SAT means Constraint Programming – Satisfiability. It searches integer and
+Boolean decisions while enforcing declared rules.
+
+- `model.new_bool_var(...)` creates a variable whose value is `0` or `1`.
+  NebulaX uses it for choices such as whether a recovery-mode job is present.
+- `model.new_int_var_from_domain(...)` creates an integer variable restricted
+  to an allowed set. Start variables use the configured five-minute grid.
+- `model.new_optional_interval_var(start, duration, end, present, ...)` creates
+  a time interval that exists only when `present == 1`.
+- `constraint.only_enforce_if(condition)` makes a constraint conditional. For
+  example, a deferred job does not consume an engineer.
+- `model.add_no_overlap(intervals)` prevents one named person or item of
+  equipment from being used by overlapping work.
+- `model.add_cumulative(intervals, demands, capacity)` limits pooled demand at
+  every moment, such as five technicians shared across concurrent jobs.
+- `model.add_abs_equality(distance, start - baseline)` calculates absolute
+  movement or preference deviation without allowing a negative distance.
+
+The solver measures time as integer minutes from the selected engineering
+window's start. This keeps the model small while the exported result retains
+timezone-aware ISO timestamps.
+
+## Two solving modes
+
+`solve(...)` always attempts strict mode first. Strict mode sets every selected
+request's presence Boolean to `1`; therefore every request must be scheduled.
+
+Recovery runs only after CP-SAT proves strict mode `INFEASIBLE`. It changes
+eligible deferrable requests to optional intervals. Mandatory, non-deferrable,
+approved and locked/frozen work remains required. No safety or operational
+constraint becomes soft.
+
+Status meanings are precise:
+
+- `OPTIMAL`: a valid schedule was found and every objective stage was proved
+  best under the documented hierarchy.
+- `FEASIBLE`: a valid schedule was found, but at least one objective stage was
+  not proved best before the limit.
+- `INFEASIBLE`: CP-SAT proved that no schedule satisfies the hard constraints.
+- `UNKNOWN`: the limit ended without a solution or an infeasibility proof.
+- `MODEL_INVALID`: OR-Tools rejected the constructed model.
+
+Variable values are read only after `OPTIMAL` or `FEASIBLE`. `UNKNOWN` never
+triggers recovery because it is not proof of infeasibility.
+
+## Nine hard constraints
+
+| # | Rule | Main full-solver implementation | Independent check |
+|---|---|---|---|
+| 1 | Engineering Window & Handback | Start domains, complete phase duration and usable horizon in `build_model` | Duration, grid, window and 20-minute clearance |
+| 2 | Sector Availability & Safety Footprint | Fixed-interval avoidance and pairwise footprint separation | Blackouts, fixed unavailability, transit and overlaps |
+| 3 | Work & Traction-Power Compatibility | Power/work lookup plus conditional transition separation | Common-zone compatibility and transition guards |
+| 4 | Resource Requirements, Qualification & Capacity | Role assignment Booleans, availability, `NoOverlap` and `Cumulative` | Qualifications, exact equipment, availability and pool load |
+| 5 | Resource Transfer / Travel Time | Directional pairwise separation for shared named resources | Consecutive assignment and directional matrix lookup |
+| 6 | Dependencies & Required Sequence | Presence implication and buffered predecessor completion | Predecessor presence and handover time |
+| 7 | Booking Commitment & Freeze Horizon | Fixed allocations and movement variables | Approved presence and unchanged frozen/locked fields |
+| 8 | Request Timing Flexibility & Deferral Eligibility | `EXACT`, `RANGE`, `ANY_TIME`, dates and recovery presence | Date/range/exact semantics and permitted omission |
+| 9 | Service-Critical / Mandatory Work | Mandatory presence fixed to `1` in both modes | Mandatory request presence |
+
+Each numbered check produces a separate pass/fail record. A CP-SAT result is
+described as constraint-valid only when all nine independent checks pass.
+
+## Lexicographic objectives
+
+Lexicographic means completing one objective, fixing its proved optimum, then
+optimising the next. It avoids an unsafe weighted sum in which many minor gains
+could outweigh one important scheduling decision.
+
+Strict mode minimises, in order:
+
+1. count of moved existing unlocked allocations;
+2. total movement minutes;
+3. deviation from non-null preferred starts;
+4. latest completion minute as a deterministic tie-breaker.
+
+Recovery mode optimises, in order:
+
+1. maximum scheduled `urgency_score` total, after mandatory presence has
+   already been enforced as a hard rule;
+2. maximum request count;
+3. minimum moved existing-allocation count;
+4. minimum movement minutes;
+5. minimum deviation from non-null preferred starts;
+6. minimum latest completion minute.
+
+A null `preferred_start` creates no deviation variable or artificial penalty.
+Each stage reports its incumbent value, best bound and relative optimality gap.
+
+## Determinism and time limits
+
+The prototype uses one CP-SAT worker and random seed `17`. One worker provides
+stable demonstrations at the cost of not using parallel search. Each strict or
+recovery mode has an eight-second default limit; sequential objective stages
+share that mode limit.
+
+## Run the canonical solver
+
+```sh
+python -m backend.app.services.cp_sat --planning-date 2026-09-14 --time-limit 8
 ```
 
-Your result must include `status`, `engine`, `allocations`, `message` and `elapsed_seconds`. Successful results can also include `objective`. Each allocation has `request_id`, `start`, `end`, `engineer_id`, `equipment_ids` and `locked`.
+For JSON output:
 
-The API chooses the configured implementation through `services/scheduler.py`. It rechecks the output before making it publishable. Do not put HTTP calls, SQL writes, login code or frontend formatting inside the optimisation module.
-
-## The two implementations are not equivalent in scale
-
-`demo_search.py` is a small reference search. It explicitly enumerates start-time/engineer candidates, prunes using the rule checker, and minimises preference deviation. It is capped at six pending requests. It can return a feasible incumbent when its time limit expires, or `UNKNOWN` if it has not found one. It is intentionally labelled as NOT CP-SAT.
-
-`cp_sat.py` is the OR-Tools implementation for your team to validate and extend. It currently has a 40-active-request guard; that is a development guard, not a benchmarked capacity claim. OR-Tools was unavailable in the build environment, so its seven tests were not executed here.
-
-Both solve a finite five-minute start-time model. `OPTIMAL` means optimal under that model/objective, not globally best under real railway operating rules.
-
-## Current CP-SAT model
-
-### Variables
-
-The full integer formulation chooses $\{y_j, s_j, e_j, x_{jeq}, m_j, \delta_j\}$:
-
-- $y_j \in \{0, 1\}$: Binary task acceptance variable ($1 = \text{scheduled tonight}, 0 = \text{deferred}$).
-- $s_j, e_j \in [0, T^{use}]$: Start and completion minute ($e_j = s_j + d_j$).
-- $I_j$: Optional interval variable defined over $[s_j, d_j, e_j]$ guarded by $y_j = 1$.
-- $x_{jeq} \in \{0, 1\}$: Assignment of specialist engineer $e$ to competency role $q$ on job $j$.
-- $m_j \in \{0, 1\}$: Movement indicator for approved jobs outside freeze horizon ($1 = \text{moved from } \bar{s}_j$).
-- $\delta_j \ge |s_j - p_j|$: Absolute deviation from preferred start minute.
-- $C_{\max} \ge e_j$: Latest completion minute across scheduled work orders.
-- $I_{v,s}$: Optional transit corridor interval for engineering vehicle $v \in \mathcal{V}$ across sector $s$ with duration $\tau_{v,s}$.
-
-All domain entities are typed and validated via `backend/app/models.py`.
-
-### The 9 Hard Constraints
-
-1. **Engineering Window & Handback:** $s_j \ge 0$, $e_j \le T^{use} = T - B$ (where $B$ is the handback buffer, e.g. 20 min).
-2. **Sector Availability & Safety Footprint:**
-   - Fixed sector unavailabilities ($\mathcal{B}_s$): $y_j = 1 \implies (e_j \le \alpha_{sb}) \lor (s_j \ge \beta_{sb})$.
-   - Mutually exclusive protected footprints ($C^{sector}_{jk} = 1$): $(e_j \le s_k) \lor (e_k \le s_j)$.
-3. **Work & Traction-Power Compatibility:** Opposing traction power (`ON` vs `OFF`) in common feeding zones ($C^{power}_{jk}=1$) or work incompatibilities ($C^{work}_{jk}=1$) require transition separation $g_{jk}$: $(e_j + g_{jk} \le s_k) \lor (e_k + g_{kj} \le s_j)$. Tasks requiring `NONE` are electrically neutral.
-4. **Resource Requirements, Qualification & Capacity:**
-   - Specialist engineers: $\sum_e x_{jeq} = n_{jq} y_j$, $x_{jeq} \le Q_{eq}$, $\text{NoOverlap}(\{I_{je}\})$, and no overlap with engineer absence windows $\mathcal{B}_e$.
-   - Pooled manpower & equipment: $\text{Cumulative}(\{I_j\}, \{c_{jr}\}, C_r)$ ensures demand at minute $t$ never exceeds capacity $C_r$.
-5. **Resource Transfer / Travel Time:** Assigned engineers/equipment moving between consecutive jobs must observe inter-site travel times: $(e_j + \tau^E_{jk} \le s_k) \lor (e_k + \tau^E_{kj} \le s_j)$.
-6. **Dependencies & Required Sequence:** Prerequisite enforcement $y_j \le y_p$ and handover clearance margin $s_j \ge e_p + \Delta_{pj}$ for all $p \in Pred(j)$.
-7. **Booking Commitment & Freeze Horizon:** Approved jobs remain scheduled ($A_j = 1 \implies y_j = 1$); frozen jobs within $H^{freeze}$ cannot move ($L_j = 1 \implies s_j = \bar{s}_j$); approved non-frozen jobs may move only if necessary ($m_j = 1$).
-8. **Request Timing Flexibility & Deferral Eligibility:** Accommodates `EXACT`, `RANGE`, and `ANY_TIME` modes. Non-deferrable work enforces $D_j^{allow} = 0 \implies y_j = 1$.
-9. **Service-Critical / Mandatory Work:** Hard rule $M_j = 1 \implies y_j = 1$. Solver may never drop safety-critical repairs to resolve conflicts.
-
-### Lexicographic Objective Architecture
-
-The formulation recommends solving in **strict lexicographic priority stages**:
-
-1. **Stage 0:** Satisfy all 9 hard constraints.
-2. **Stage 1 (Schedule Stability):** $\min \sum_{j: A_j=1, L_j=0} m_j$ (minimize disturbance to approved bookings).
-3. **Stage 2 (Optional Urgency):** $\max \sum_j U_j y_j$ (maximize completed non-mandatory work weighted by urgency $U_j \in [1, 5]$).
-4. **Stage 3 (Requester Preferences):** $\min \sum_j F_j \delta_j$ (minimize total absolute deviation from preferred times).
-5. **Stage 4 (Handback Margin):** $\min C_{\max}$ (maximize spare margin $\text{Slack} = T^{use} - C_{\max}$).
-
-The starter implementation aggregates priority terms into a weighted single-solve objective:
-
-```text
-(number_of_active_jobs + 1) * total_absolute_start_deviation_minutes
-  + count_of_nonpreferred_engineer_assignments
+```sh
+python -m backend.app.services.cp_sat --planning-date 2026-09-14 --time-limit 8 --json
 ```
 
-The initial fixture produces a total weighted objective of 475 with R03 at 02:30 and R04 at 02:35 using E01. The reference JSON is not imported by either solver.
+The planning night is a required command-line argument. Library and backend
+calls may use the explicitly configured `metadata.planning_date`.
 
-## First tasks
+## Backend integration
 
-1. Install `requirements-cpsat.txt`, set `SOLVER_ENGINE=cp_sat`, restart and run `python -m pytest -q`.
-2. Verify the reference result and engineer-absence case through both solver tests and the website.
-3. Add tests before extending constraints. A rule must be added to both the CP-SAT model and the checker.
-4. Generate two or three meaningfully distinct alternatives; do not repeatedly return the same assignment with a different ID.
-5. Add explicit optional/priority handling only after agreeing the policy with the team. Infeasible mandatory work must not disappear silently.
+`backend/app/services/scheduler.py` is the API seam. `cp_sat` results are
+already independently checked by the full validator. The older `demo_search`
+engine remains paired with the older lightweight checker and demo dataset.
 
-Later extensions include solver-side transit corridor scheduling, movable approved allocations with disruption penalties, richer resource assignments, operator-supplied compatibility rules and route reservations. Do not add a shortest-path route and claim it is authorised railway access.
+The application seeds fresh databases from `DATASET_PATH`, which defaults to
+the comprehensive dataset. A new database filename is used so an existing
+starter database is preserved. Proposal commit repeats full validation before
+writing allocations.
 
-## Status discipline
+## Prototype assumptions and limitations
 
-- `OPTIMAL`: objective proven optimal for the encoded model/domain.
-- `FEASIBLE`: valid incumbent; optimality not proved.
-- `INFEASIBLE`: infeasibility proved for the encoded model/domain (or an empty required domain/dependency contradiction).
-- `UNKNOWN`: search did not establish a solution or impossibility in the allowed time.
-- `MODEL_INVALID`: model formulation error; do not publish.
-- `UNAVAILABLE`: OR-Tools is not installed.
-- `REVIEW_REQUIRED`: invalid locked baseline or a missing required rule.
-- `VALIDATION_FAILED`: the checker rejected a candidate; do not publish it.
-- `LIMIT`: starter size guard reached; not a mathematical infeasibility result.
-
-The demo search reuses the checker as its feasibility evaluator; it is not an independent implementation of every rule. The CP-SAT model has separate global constraint code, but shares simple helpers and candidate screening. Shared code can contain shared mistakes. Domain validation and additional tests remain necessary.
-
-## References
-
-- [OR-Tools scheduling example](https://developers.google.com/optimization/scheduling/job_shop)
-- [CP-SAT modelling/status guide](https://developers.google.com/optimization/cp/cp_solver)
-- [Python model API](https://or-tools.github.io/docs/pdoc/ortools/sat/python/cp_model.html)
+- A missing different-sector travel pair uses
+  `planning_rules.different_site_transfer_minutes`. This is a declared
+  synthetic fallback, not invented operational route data.
+- Required named equipment IDs cannot be substituted.
+- Existing vehicle assignments are preserved. Requests do not currently have
+  a field that authorises the solver to allocate a new vehicle.
+- Vehicle transit is fixed input; the solver does not choose routes.
+- One solve covers one engineering night and jobs are unsplittable.
+- Deferred global-conflict explanations are intentionally cautious when no
+  single cause has been proved.

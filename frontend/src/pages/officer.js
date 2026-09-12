@@ -1,5 +1,6 @@
 import { h, time, badge, duration } from '../lib/format.js';
 import { timeline, weekOverview } from '../components/timeline.js?v=20260910-demo2';
+import { proposalPanel } from '../components/proposal.js';
 
 function requestPool(state){
   const scheduled=new Set((state.manualPlan||[]).map(a=>a.request_id));
@@ -15,7 +16,7 @@ export function officerPage(state) {
   const pending=s.requests.filter(r=>r.status==='submitted').length;
   const manualLocks=(state.manualPlan||[]).filter(a=>a.locked&&!s.committed_allocations.some(c=>c.request_id===a.request_id)).length;
   const conflictIds=new Set(state.issues.flatMap(issue=>issue.request_ids||[])),conflicts=conflictIds.size?Math.max(1,conflictIds.size-1):state.issues.length;
-  return `<div class="schedule-page">${weekOverview(state)}${timeline(state,{editable:true})}${requestPool(state)}${state.issues.length?`<div class="conflict-toast"><b>!</b><span>${conflicts} schedule conflict${conflicts===1?'':'s'}</span></div>`:''}</div>`;
+  return `<div class="schedule-page">${weekOverview(state)}${timeline(state,{editable:true})}${proposalPanel(state)}${requestPool(state)}${state.issues.length?`<div class="conflict-toast"><b>!</b><span>${conflicts} schedule conflict${conflicts===1?'':'s'}</span></div>`:''}</div>`;
 }
 
 export function resourcesPage(state) {

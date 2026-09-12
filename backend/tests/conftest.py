@@ -12,7 +12,8 @@ def snapshot():
 @pytest.fixture
 def client(tmp_path):
     settings = Settings(_env_file=None, app_env='test', auth_mode='demo',
-                        solver_engine='demo_search', database_path=str(tmp_path / 'test.sqlite3'))
+                        solver_engine='demo_search', database_path=str(tmp_path / 'test.sqlite3'),
+                        dataset_path=str(ROOT / 'data' / 'demo_data.json'))
     with TestClient(create_app(settings)) as test_client:
         yield test_client
 

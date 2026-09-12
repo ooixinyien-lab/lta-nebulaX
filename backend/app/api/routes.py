@@ -9,13 +9,23 @@ from ..schemas import (User, RequestCreate, CommitInput, ResourceChange, ManualP
                        SolveInput, ApprovalInput, AllocationLockInput)
 from ..services.checker import check_plan
 from ..services.common import preferred_plan, make_allocation
+from ..services.full_validator import validate_schedule
 from ..services.scheduler import solve
 
 router = APIRouter(prefix="/api")
 
 
-def normalise_allocations(snapshot, drafts):
+def normalise_allocations(snapshot, drafts, *, include_submitted=False):
+    """Derive trusted allocation fields from request records.
+
+    Canonical planning may position draft requests because the formulation
+    defines draft work as movable. The scaffold workflow keeps its separate
+    approval gate.
+    """
     requests = {r["id"]: r for r in snapshot["requests"]}
+    active_statuses = {"approved", "scheduled"}
+    if include_submitted:
+        active_statuses.add("submitted")
     allocations, seen = [], set()
     for draft in drafts:
         raw = draft.model_dump(mode="json")
@@ -23,7 +33,7 @@ def normalise_allocations(snapshot, drafts):
         if request_id in seen:
             raise HTTPException(422, f"Duplicate allocation for {request_id}")
         selected = requests.get(request_id)
-        if selected is None or selected["status"] not in ("approved", "scheduled"):
+        if selected is None or selected["status"] not in active_statuses:
             raise HTTPException(422, f"Unknown or inactive request {request_id}")
         allocation = make_allocation(selected, raw["start"], raw["engineer_id"], raw["locked"])
         allocations.append(allocation)
@@ -61,7 +71,7 @@ def store_proposal(db, proposal, user_id):
 
 @router.get("/health")
 def health():
-    return {"ok": True, "application": "RailPlan starter"}
+    return {"ok": True, "application": "NebulaX scheduler"}
 
 @router.get("/config")
 def public_config(request: Request):
@@ -112,6 +122,23 @@ def create_request(payload: RequestCreate, request: Request, user: User = Depend
             raise HTTPException(422, "Unknown skill or no qualified engineer in the catalog")
         if raw["preferred_engineer"] is not None and raw["preferred_engineer"] not in eligible:
             raise HTTPException(422, "Preferred engineer is not eligible for this skill")
+        catalogue = {item["work_type"]: item for item in s.get("job_catalogue", [])}
+        catalogue_entry = catalogue.get(raw.get("work_type"))
+        if catalogue and catalogue_entry is None:
+            raise HTTPException(422, "Select a work type from the job catalogue")
+        if catalogue_entry is not None:
+            roles = catalogue_entry["required_engineer_roles"]
+            if raw["required_skill"] not in roles:
+                raise HTTPException(
+                    422,
+                    "Required skill must match the selected work type's catalogue role",
+                )
+            raw["power_requirement"] = catalogue_entry["power_requirement"]
+            raw["required_engineer_roles"] = roles
+            raw["pooled_resources"] = catalogue_entry["pooled_resources"]
+            raw["technicians_required"] = catalogue_entry["pooled_resources"].get(
+                "TECH", 0
+            )
         own_ids = {r["id"] for r in s["requests"] if r["owner_id"] == user.id and r["status"] != "cancelled"}
         if not set(raw["depends_on"]) <= own_ids:
             raise HTTPException(422, "New requests may reference your own active requests as prerequisites")
@@ -121,9 +148,21 @@ def create_request(payload: RequestCreate, request: Request, user: User = Depend
             raise HTTPException(422, "Preferred start must be on an allowed date")
         if payload.preferred_start.minute % s["planning_rules"]["start_grid_minutes"]:
             raise HTTPException(422, "Preferred start must be on the five-minute grid")
-        raw.update(id="R-" + uuid4().hex[:6].upper(), owner_id=user.id, status="submitted",
-                   eligible_engineers=eligible, power_zone=sectors[raw["work_sector"]]["power_zone"],
-                   mandatory_in_this_demo=True, priority="normal", split_allowed=False)
+        raw.update(
+            id="R-" + uuid4().hex[:6].upper(),
+            owner_id=user.id,
+            status="submitted",
+            eligible_engineers=eligible,
+            power_zone=sectors[raw["work_sector"]]["power_zone"],
+            timing_mode="RANGE",
+            mandatory=False,
+            deferrable=True,
+            approved=False,
+            frozen=False,
+            urgency_score=3,
+            priority="normal",
+            split_allowed=False,
+        )
         c.execute("INSERT INTO requests VALUES (?,?,?)", (raw["id"], user.id, json.dumps(raw)))
         db.bump(c)
         db.audit(c, user.id, "request_submitted", raw["id"])
@@ -191,6 +230,17 @@ def change_allocation_locks(payload: AllocationLockInput, request: Request, user
 @router.post("/conflicts/check")
 def conflicts(request: Request, user: User = Depends(officer_only)):
     snapshot = request.app.state.db.snapshot()
+    if request.app.state.settings.solver_engine == "cp_sat":
+        validation = validate_schedule(
+            snapshot,
+            snapshot["committed_allocations"],
+            snapshot["metadata"]["planning_date"],
+            mode="recovery",
+        )
+        return {
+            "planning_version": snapshot["metadata"]["planning_version"],
+            "issues": validation["issues"],
+        }
     return {"planning_version": snapshot["metadata"]["planning_version"],
             "issues": check_plan(snapshot, preferred_plan(snapshot), require_all=True)}
 
@@ -198,8 +248,22 @@ def conflicts(request: Request, user: User = Depends(officer_only)):
 @router.post("/schedule/check")
 def check_manual_plan(payload: ManualPlanInput, request: Request, user: User = Depends(officer_only)):
     snapshot = request.app.state.db.snapshot()
-    allocations = normalise_allocations(snapshot, payload.allocations)
-    issues = check_plan(snapshot, allocations, require_all=False)
+    canonical = request.app.state.settings.solver_engine == "cp_sat"
+    allocations = normalise_allocations(
+        snapshot,
+        payload.allocations,
+        include_submitted=canonical,
+    )
+    if canonical:
+        validation = validate_schedule(
+            snapshot,
+            allocations,
+            snapshot["metadata"]["planning_date"],
+            mode="recovery",
+        )
+        issues = validation["issues"]
+    else:
+        issues = check_plan(snapshot, allocations, require_all=False)
     return {"planning_version": snapshot["metadata"]["planning_version"],
             "valid": not issues, "issues": issues, "allocations": allocations}
 
@@ -207,17 +271,46 @@ def check_manual_plan(payload: ManualPlanInput, request: Request, user: User = D
 def propose(request: Request, payload: SolveInput | None = None, user: User = Depends(officer_only)):
     db, settings = request.app.state.db, request.app.state.settings
     snapshot = db.snapshot()
+    canonical = settings.solver_engine == "cp_sat"
     locked_committed = {a["request_id"] for a in snapshot["committed_allocations"] if a.get("locked")}
-    if not any(r["status"] == "approved" or (r["status"] == "scheduled" and r["id"] not in locked_committed) for r in snapshot["requests"]):
-        raise HTTPException(409, "No approved or unlocked jobs to schedule")
-    locked = normalise_allocations(snapshot, (payload or SolveInput()).locked_allocations)
-    schedulable = {r["id"] for r in snapshot["requests"] if r["status"] in ("approved", "scheduled")}
+    if canonical:
+        has_work = any(r["status"] != "cancelled" for r in snapshot["requests"])
+    else:
+        has_work = any(
+            r["status"] == "approved"
+            or (r["status"] == "scheduled" and r["id"] not in locked_committed)
+            for r in snapshot["requests"]
+        )
+    if not has_work:
+        message = (
+            "No requests are eligible for this solver run"
+            if canonical
+            else "No approved or unlocked jobs to schedule"
+        )
+        raise HTTPException(409, message)
+    locked = normalise_allocations(
+        snapshot,
+        (payload or SolveInput()).locked_allocations,
+        include_submitted=canonical,
+    )
+    schedulable_statuses = {"approved", "scheduled"}
+    if canonical:
+        schedulable_statuses.add("submitted")
+    schedulable = {r["id"] for r in snapshot["requests"] if r["status"] in schedulable_statuses}
     if any(a["request_id"] not in schedulable for a in locked):
-        raise HTTPException(422, "Only approved or scheduled jobs can be added as solver locks")
+        raise HTTPException(422, "Only requests selected by this solver can be locked")
     locked = [{**a, "locked": True} for a in locked]
     fixed_committed = [a for a in snapshot["committed_allocations"] if a.get("locked")]
     locked_ids = {a["request_id"] for a in locked}
-    lock_issues = check_plan(snapshot, fixed_committed + [a for a in locked if a["request_id"] not in {x["request_id"] for x in fixed_committed}])
+    lock_issues = [] if canonical else check_plan(
+        snapshot,
+        fixed_committed
+        + [
+            a
+            for a in locked
+            if a["request_id"] not in {x["request_id"] for x in fixed_committed}
+        ],
+    )
     if lock_issues:
         return {"status": "LOCK_CONFLICT", "engine": settings.solver_engine, "allocations": [],
                 "issues": lock_issues, "message": "One or more locked jobs conflict. Unlock or move them before auto-fitting.",
@@ -233,15 +326,34 @@ def propose(request: Request, payload: SolveInput | None = None, user: User = De
 def manual_proposal(payload: ManualPlanInput, request: Request, user: User = Depends(officer_only)):
     db = request.app.state.db
     snapshot = db.snapshot()
-    allocations = normalise_allocations(snapshot, payload.allocations)
-    issues = check_plan(snapshot, allocations, require_all=False)
+    canonical = request.app.state.settings.solver_engine == "cp_sat"
+    allocations = normalise_allocations(
+        snapshot,
+        payload.allocations,
+        include_submitted=canonical,
+    )
+    if canonical:
+        validation = validate_schedule(
+            snapshot,
+            allocations,
+            snapshot["metadata"]["planning_date"],
+            mode="recovery",
+        )
+        issues = validation["issues"]
+        validation_contract = "full"
+    else:
+        validation = None
+        issues = check_plan(snapshot, allocations, require_all=False)
+        validation_contract = "scaffold"
     if issues:
         return {"status": "VALIDATION_FAILED", "engine": "manual", "allocations": [],
                 "issues": issues, "message": "Resolve the highlighted conflicts before staging this plan.",
                 "elapsed_seconds": 0}
     result = {"status": "VALID", "engine": "manual", "allocations": allocations,
               "issues": [], "message": "Manual plan passed the independent checker. Approval is still required.",
-              "elapsed_seconds": 0}
+              "elapsed_seconds": 0, "mode": "recovery",
+              "validation": validation, "validation_contract": validation_contract,
+              "planning_date": snapshot["metadata"].get("planning_date")}
     proposal = build_proposal(snapshot, result, user.id)
     store_proposal(db, proposal, user.id)
     return proposal
@@ -253,7 +365,7 @@ def list_proposals(request: Request, user: User = Depends(officer_only)):
 
 @router.post("/proposals/{proposal_id}/commit")
 def commit(proposal_id: str, payload: CommitInput, request: Request, user: User = Depends(officer_only)):
-    """The officer's click is the approval in this starter. No automatic railway authority."""
+    """Revalidate and atomically publish an officer-approved synthetic plan."""
     db = request.app.state.db
     with db.connection(write=True) as c:
         row = c.execute("SELECT payload FROM proposals WHERE id=?", (proposal_id,)).fetchone()
@@ -265,7 +377,16 @@ def commit(proposal_id: str, payload: CommitInput, request: Request, user: User 
         s = db.snapshot(c)
         if p["planning_version"] != payload.expected_version or p["planning_version"] != s["metadata"]["planning_version"]:
             raise HTTPException(409, "This proposal is stale. Generate and approve a fresh plan.")
-        errors = check_plan(s, p["allocations"], require_all=False)
+        if p.get("engine") == "cp_sat" or p.get("validation_contract") == "full":
+            validation = validate_schedule(
+                s,
+                p["allocations"],
+                p["planning_date"],
+                mode=p["mode"],
+            )
+            errors = validation["issues"]
+        else:
+            errors = check_plan(s, p["allocations"], require_all=False)
         if errors:
             raise HTTPException(409, {"message": "Revalidation failed; nothing was changed", "issues": errors})
         planned_ids = {a["request_id"] for a in p["allocations"]}

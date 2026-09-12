@@ -38,7 +38,7 @@ export function timeline(state, options={}) {
   let jobs = editable ? (state.manualPlan||[]).map(a=>({...a,label:a.request_id,protected_sectors:requests[a.request_id]?.protected_sectors||[],kind:a.locked?'locked':'manual'})) : s.occupancy.map((a) => ({ ...a, kind: 'booked' }));
   if (!editable && viewMode === 'requested' && state.user.role === 'officer') {
     jobs = [...jobs, ...s.requests.filter((r) => r.status === 'submitted').map((r) => ({
-      label: r.id, start: r.preferred_start, end: endOf(r.preferred_start, duration(r)),
+      label: r.id, start: r.preferred_start || r.earliest_start, end: endOf(r.preferred_start || r.earliest_start, duration(r)),
       protected_sectors: r.protected_sectors, kind: 'pending'
     }))];
   }

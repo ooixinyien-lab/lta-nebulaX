@@ -12,19 +12,19 @@ The current frontend is intentionally native JavaScript, not React. Decide once,
 
 | Stream | Owned files | First useful task | Definition of done |
 |---|---|---|---|
-| Data / domain model | `backend/app/models.py`, `data/demo_data.json`, `constraints & LP setup.md` | Maintain typed Pydantic models for the 9 hard constraints, master data, vehicles, rules | Fixture passes validation; round-trip serialization works; backward compatibility intact |
+| Data / domain model | `backend/app/models.py`, `scripts/generate_synthetic_dataset.py`, `data/comprehensive_synthetic_data.json`, `constraints_lp_setup.md` | Maintain typed Pydantic models, generated master data and the 9 approved constraints | Generator validation and round-trip serialization pass |
 | Frontend | `frontend/src/pages/`, `components/`, `styles.css` | Improve request feedback and make protection vs work location unmistakable | Submitted data persists; rendered fields match the API; no scheduling rules hidden in UI |
 | Backend/rules | `backend/app/api/routes.py`, `database.py`, `services/checker.py` | Add well-defined work-compatibility rules and clear errors | Tests demonstrate allowed AND forbidden cases; revision bumps and ownership still work |
-| Optimisation | `services/cp_sat.py`, `candidates.py`, `scheduler.py`, `test_scheduler.py` | Install OR-Tools, run seven CP-SAT tests, then compare against demo search | Feasible outputs pass the checker; status/objective meanings are documented |
+| Optimisation | `services/cp_sat.py`, `full_validator.py`, `scheduler.py`, full-solver tests | Maintain the canonical strict/recovery solver without expanding V0/V1 beyond their teaching scope | Every constraint has solver and independent-validator coverage |
 | Auth/integration/testing | `backend/app/auth/`, `frontend/src/auth/`, CI and auth tests | Enable a real Supabase test project with two requester users and one officer | Real requester cannot call officer endpoints; no secret key reaches the browser |
 
 With five people, split data modeling and frontend streams. With three people, combine auth with backend, and give browser QA to the frontend owner.
 
 ### Shared files that need coordination
 
-`backend/app/models.py`, `backend/app/schemas.py`, `frontend/src/app.js`, `frontend/src/lib/api.js`, `data/demo_data.json`, the dependency files and `.env.example` affect several streams. Assign one integrator or announce edits before changing them. The API guide is the contract; do not silently rename fields.
+`backend/app/models.py`, `backend/app/schemas.py`, `frontend/src/app.js`, `frontend/src/lib/api.js`, `scripts/generate_synthetic_dataset.py`, the dependency files and `.env.example` affect several streams. Assign one integrator or announce edits before changing them. The API guide is the contract; do not silently rename fields.
 
-Keep the current fixture as a baseline. Put additional scenarios in new files/tests rather than changing every existing test to match a new answer.
+Treat the comprehensive generator and constraints document as ground truth. Keep `demo_data.json` only as the explicit scaffold-test baseline.
 
 ## Module boundaries
 

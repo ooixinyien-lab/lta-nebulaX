@@ -1,5 +1,5 @@
 import { h, time, dateLabel, duration, badge } from '../lib/format.js';
-import { timeline, corridor } from '../components/timeline.js';
+import { timeline } from '../components/timeline.js';
 
 export function requestTable(snapshot, ownerView=false) {
   return `<section class="panel"><div class="panel-head"><div><h2>${ownerView?'Your requests':'Request register'}</h2>${ownerView?'<p>Submitted demand and approved allocations</p>':''}</div>${ownerView?'<button class="button primary small" data-nav="new-request">+ New request</button>':''}</div><div class="table-scroll"><table><thead><tr><th>Request / title</th><th>Sector</th><th>Preferred time</th><th>Duration</th><th>State</th><th>${ownerView?'Action':'Requirements'}</th></tr></thead><tbody>${snapshot.requests.length?snapshot.requests.map((r)=>`<tr><td><strong>${h(r.id)}</strong><span class="cell-sub">${h(r.title)}</span></td><td>${h(r.work_sector)}<span class="cell-sub">${h(r.power_zone)}</span></td><td>${dateLabel(r.preferred_start)} ${time(r.preferred_start)}<span class="cell-sub">${r.allowed_dates.length} permitted night${r.allowed_dates.length>1?'s':''}</span></td><td>${duration(r)} min</td><td>${badge(r.status,r.status==='scheduled'?'success':r.status==='submitted'?'warning':'')}</td><td>${ownerView?(r.status==='submitted'?`<button class="text-button" data-cancel="${h(r.id)}">Withdraw</button>`:'&mdash;'):`${h(r.required_skill)}<span class="cell-sub">${h(r.power_requirement)} &middot; ${r.technicians_required} technicians</span>`}</td></tr>`).join(''):'<tr><td colspan="6" class="empty">No requests</td></tr>'}</tbody></table></div></section>`;
@@ -7,7 +7,7 @@ export function requestTable(snapshot, ownerView=false) {
 
 export function requesterPage(state) {
   const s=state.snapshot;
-  return `<div class="stats-grid three"><div class="stat"><span>Your requests</span><strong>${s.requests.length}</strong></div><div class="stat"><span>Awaiting allocation</span><strong>${s.requests.filter(r=>['submitted','approved'].includes(r.status)).length}</strong></div><div class="stat"><span>Booked</span><strong>${s.committed_allocations.length}</strong></div></div>${requestTable(s,true)}${corridor(s)}${timeline(state)}`;
+  return `<div class="stats-grid three"><div class="stat"><span>Your requests</span><strong>${s.requests.length}</strong></div><div class="stat"><span>Awaiting allocation</span><strong>${s.requests.filter(r=>['submitted','approved'].includes(r.status)).length}</strong></div><div class="stat"><span>Booked</span><strong>${s.committed_allocations.length}</strong></div></div>${requestTable(s,true)}${timeline(state)}`;
 }
 
 export function newRequestPage(snapshot) {

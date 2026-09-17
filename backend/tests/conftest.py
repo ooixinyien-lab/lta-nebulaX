@@ -1,9 +1,7 @@
 import json
 from pathlib import Path
 import pytest
-from fastapi.testclient import TestClient
 from backend.app.config import ROOT, Settings
-from backend.app.main import create_app
 
 @pytest.fixture
 def snapshot():
@@ -11,6 +9,9 @@ def snapshot():
 
 @pytest.fixture
 def client(tmp_path):
+    from fastapi.testclient import TestClient
+    from backend.app.main import create_app
+
     settings = Settings(_env_file=None, app_env='test', auth_mode='demo',
                         solver_engine='demo_search', database_path=str(tmp_path / 'test.sqlite3'),
                         dataset_path=str(ROOT / 'data' / 'demo_data.json'))

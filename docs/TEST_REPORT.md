@@ -1,8 +1,38 @@
-# Canonical scheduler verification report
+# NebulaX Testing and Verification Report
 
-Verification date: **13 September 2026**.
+> [!IMPORTANT]
+> **AUTHORITATIVE SOURCE OF TRUTH: [PS1_OFFICIAL_ADOPTION_PLAN.md](../PS1_OFFICIAL_ADOPTION_PLAN.md)**  
+> This report documents testing verification for NebulaX.
+> Per [PS1_OFFICIAL_ADOPTION_PLAN.md](../PS1_OFFICIAL_ADOPTION_PLAN.md):
+> - **Synthetic test success does not certify PS1 correctness.** The 135 passing tests below verify only the historical single-night synthetic prototype.
+> - The synthetic solver's recovery behavior (scheduling 7 of 12 requests) violates PS1's mandatory complete-workload requirement.
+> - Official PS1 verification is governed by the 7-step testing and validator loop detailed below.
 
-## Executed results
+---
+
+## 1. Official PS1 Validation Loop & Test Plan
+
+Per [PS1_OFFICIAL_ADOPTION_PLAN.md](../PS1_OFFICIAL_ADOPTION_PLAN.md), official PS1 verification requires:
+
+1. **8-CSV Input Checks:** Validate schemas, composite keys `(line_code, station_id)`, gapped activity IDs, and acyclic dependencies across all 8 official input files.
+2. **Mandatory Full Workload:** Validate that every activity receives full yield ($\ge d_i$) with no dropped activities.
+3. **Topology & Protection Expansion:** Independent verification of core footprint traversal, buffer sectors (Live 2, Consist 1, Others 0), opposite-bound Live mirroring, and cross-line interchange crossover.
+4. **Possession Accounting:** Verify co-sharing legality (1 PM alone, 1 PC + $\le 3$ C, or $\le 4$ C; never 2 PCs) and nominal capacity limits ($s_{lw}$).
+5. **Local Night & Workfront Rules:** Validate that weekly local night indices do not exceed contract caps ($K_c$) and concurrent activities do not exceed workfronts ($f_c$).
+6. **Scenario Constraints (A, B, C):** Verify that Scenario A forbids location excess; Scenario B forbids planned date overrun; Scenario C enforces line ECLO windows ($\le 2$ weeks) and $\le 1$ excess slot per location/week.
+7. **Official Score Reconciliation:** Exact calculation of activity overrun penalty ($P$), excess slots ($V$), and ECLO count ($E$) matching the official scoring formula.
+8. **Artifact Round-Trip:** Export and re-read the 3 official CSV files (`SCHEDULE_ACCESS.csv`, `SCHEDULE_OCCUPANCY.csv`, `RESULTS.csv`).
+
+*Validation Provenance:* The official validator tool is not present in the supplied pack; local validation reports `validator_unavailable` until the official checker is supplied by the organisers.
+
+---
+
+## 2. Legacy Synthetic Baseline Verification (Historical Scaffold)
+
+Verification date: **13 September 2026**.  
+*Scope:* Legacy single-night CP-SAT solver and synthetic 9-rule validator.
+
+### Executed Results (Historical Prototype)
 
 | Check | Result |
 |---|---|

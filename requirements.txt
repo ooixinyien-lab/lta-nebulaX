@@ -1,2 +1,2 @@
 -r requirements-core.txt
-# The initial demo runs without OR-Tools. See requirements-cpsat.txt.
+# For OR-Tools CP-SAT solving (required for official PS1), see requirements-cpsat.txt.

@@ -1,220 +1,144 @@
-# API contract v0.2
+# NebulaX API Contract
 
-Base path: `/api`. Frontend uses same-origin fetch. No CORS configuration or direct SQLite access is required for this single-server starter.
+> [!IMPORTANT]
+> **AUTHORITATIVE SOURCE OF TRUTH: [PS1_OFFICIAL_ADOPTION_PLAN.md](../PS1_OFFICIAL_ADOPTION_PLAN.md)**  
+> This document specifies the HTTP API contracts for NebulaX.
+> Per [PS1_OFFICIAL_ADOPTION_PLAN.md](../PS1_OFFICIAL_ADOPTION_PLAN.md), the **Problem Statement 1 (PS1) Official Adoption Plan** acts as the single authoritative source of truth.
+>
+> NebulaX provides two API layers:
+> 1. **Official PS1 API (`/api/ps1/...`):** Authoritative contract for Problem Statement 1 (instance upload, scenario solve, status progress, exports, and disruption replanning).
+> 2. **Legacy Transition API (`/api/...`):** Preserved during transition to support existing synthetic prototype frontend components and historical integration tests.
 
-In demo mode use `X-Demo-User: demo-track`, `demo-signals` or `demo-officer`. These headers are intentionally forgeable for a LOCAL synthetic demo. In Supabase mode use `Authorization: Bearer <access token>`; demo headers are ignored.
+---
 
-## Routes
+# Part 1: Official PS1 API Contract (`/api/ps1`)
 
-| Method and route | Role | Purpose |
-|---|---|---|
-| `GET /health` | Public | Basic server readiness |
-| `GET /config` | Public | Auth mode, engine name and intentionally public Auth configuration |
-| `GET /me` | Signed in | Backend-assigned identity and role |
-| `GET /planning-snapshot` | Signed in | Current data; requesters get only their own requests and allocations plus anonymised occupancy |
-| `POST /requests` | Requester | Validate/store a request; server sets ownership/status and eligible engineers |
-| `POST /requests/{id}/cancel` | Owning requester | Withdraw an unbooked request if no active dependent request blocks withdrawal |
-| `PATCH /requests/approval` | Officer | Mass approve or return unscheduled requests to requested state |
-| `PATCH /allocations/locks` | Officer | Persistently lock or unlock published schedule allocations |
-| `POST /conflicts/check` | Officer | Check requested positions combined with current bookings |
-| `POST /schedule/check` | Officer | Validate the complete set of positions from the manual scheduling board |
-| `POST /schedule/proposals` | Officer | Calculate one plan for all active work while preserving supplied locks; no publication |
-| `POST /schedule/manual-proposals` | Officer | Independently check and stage the officer's manual plan for approval; unlocked committed jobs may be omitted to return them to the approved pool on publish |
-| `GET /proposals` | Officer | Last ten stored feasible proposals |
-| `POST /proposals/{id}/commit` | Officer | Approve and publish that exact version atomically |
-| `PATCH /resources` | Officer | Add an unavailable interval or change equipment serviceability |
-| `GET /audit` | Officer | Recent local audit events |
-| `POST /demo/reset` | Demo officer only | Destructively reload seed; unavailable with real Supabase Auth |
+Base path: `/api/ps1`. Supports the official PS1 workflow for unseen eight-file instance evaluation, multi-week solving, official metric reporting, and export generation.
 
-The commit action combines the officer's approval and publication in this starter. There is no multi-owner approval workflow yet.
+## Official PS1 Endpoints
 
-## Create request
+| Method and Route | Purpose | Payload / Parameters | Response |
+|---|---|---|---|
+| `POST /api/ps1/instances/upload` | Upload 8 official CSV files for an instance | `multipart/form-data` with files `01_LINES.csv` through `08_ACTIVITY_DETAILS.csv` | `{ instance_id, fingerprint, filename_status, entity_counts, validation_summary }` |
+| `GET /api/ps1/instances/{id}` | Inspect uploaded instance topology, contracts, and workload | Query parameters | Instance metadata, 54 activities, 14 contracts, 76 locations, 30 weeks |
+| `POST /api/ps1/solve` | Trigger CP-SAT solver for a scenario | `{ instance_id, scenario: "A"|"B"|"C", time_limit_seconds, baseline_run_id?, disruption? }` | `{ run_id, instance_id, scenario, status: "QUEUED"|"RUNNING", created_at }` |
+| `GET /api/ps1/runs/{id}/progress` | Real-time solver phase & progress | None | `{ run_id, phase: "FEASIBILITY"|"OPTIMISATION", elapsed_seconds, solver_status, workload_complete: boolean, incumbent_score: float }` |
+| `GET /api/ps1/runs/{id}/results` | Complete scenario results and score breakdown | None | Full result payload (see schema below) |
+| `GET /api/ps1/runs/{id}/export/{filename}` | Download exact official CSV artifact | `filename`: `SCHEDULE_ACCESS.csv`, `SCHEDULE_OCCUPANCY.csv`, or `RESULTS.csv` | CSV text file with exact official columns |
+| `POST /api/ps1/replan/diff` | Compare baseline vs disrupted replan | `{ baseline_run_id, replan_run_id }` | Changed accesses, weeks, ECLO, affected locations, score before/after, binding causes |
 
-Do not send `owner_id`, `role`, `status`, `eligible_engineers`, `power_zone` or a booking ID. Additional fields are rejected. The server derives these values.
+---
 
-```json
-{
-  "title": "Inspection request",
-  "work_type": "dynamic_signalling_test",
-  "work_sector": "S02",
-  "protected_sectors": ["S02"],
-  "power_requirement": "ON",
-  "required_skill": "signalling",
-  "preferred_engineer": "E03",
-  "required_equipment_ids": ["Q03"],
-  "technicians_required": 1,
-  "phases": [
-    {"name": "setup", "duration_minutes": 10},
-    {"name": "work", "duration_minutes": 30},
-    {"name": "test", "duration_minutes": 10},
-    {"name": "handback", "duration_minutes": 10}
-  ],
-  "preferred_start": "2026-09-14T02:30:00+08:00",
-  "earliest_start": "2026-09-14T01:15:00+08:00",
-  "deadline": "2026-09-15T04:25:00+08:00",
-  "allowed_dates": ["2026-09-14", "2026-09-15"],
-  "depends_on": []
-}
-```
-
-The work sector must be included in the protection footprint. Times must include a timezone. Existing referenced IDs must be valid. Date choices must come from the seeded calendar. New requester-defined dependencies can refer to their own active requests. When a job catalogue is present, `work_type` is required and the backend derives its standard role requirements, traction-power requirement and pooled resources from that catalogue.
-
-`power_requirement` accepts `"ON"`, `"OFF"`, or `"NONE"`. Legacy `"ANY"` remains accepted only for the scaffold fixture and is normalized to `"NONE"`. The current requester endpoint creates a movable `RANGE`, deferrable, non-mandatory request. Mandatory state is planner-controlled rather than requester-declared.
-
-The API can accept a request whose desired time conflicts. That is the point of the request queue; schema validation is not the same as allocating a feasible slot.
-
-## Conflict shape
+### Official Result Payload Schema (`GET /api/ps1/runs/{id}/results`)
 
 ```json
 {
-  "planning_version": 1,
-  "issues": [{
-    "code": "POWER",
-    "request_ids": ["R01", "R03"],
-    "message": "Opposed power requirements in Z01; allow the configured 10-minute guard.",
-    "resource": "Z01",
-    "severity": "error"
-  }]
-}
-```
-
-Codes identify modelled violations of the 9 hard constraints:
-- `ENGINEERING_WINDOW`: Work package exceeds allowed sector engineering window or morning handback buffer ($B$).
-- `SPACE`: Exclusive protected footprints overlap ($C^{sector}_{jk} = 1$).
-- `BLACKOUT`: Work package or vehicle transit intersects confirmed sector unavailability ($\mathcal{B}_s$).
-- `POWER`: Incompatible traction power requirements (`ON` vs `OFF`) in a shared feeding zone ($C^{power}_{jk}=1$).
-- `WORK_COMPATIBILITY`: Concurrent activities violate operational compatibility rules ($C^{work}_{jk}=1$).
-- `ENGINEER`: Specialist engineer double-booked, lacking required competency qualification ($Q_{eq}$), or unavailable ($\mathcal{B}_e$).
-- `MANPOWER`: Concurrent technician / pooled demand exceeds pool capacity ($C_r$).
-- `EQUIPMENT`: Assigned equipment double-booked or unavailable.
-- `TRANSFER_TIME`: Specialist engineer, vehicle, or equipment lacks required travel time ($\tau^E_{jk}$) between consecutive jobs.
-- `DEPENDENCY`: Predecessor task incomplete or handover clearance buffer ($\Delta_{pj}$) violated.
-- `LOCKED_BOOKING`: Attempted modification to a frozen approved booking inside freeze horizon ($H^{freeze}$).
-- `MANDATORY_DROPPED`: Service-critical mandatory work ($M_j = 1$) omitted or deferred.
-- `REVIEW_REQUIRED`: Undefined rule or missing compatibility specification.
-
-The message is generated from rules/data, not an LLM.
-
-## Proposal shape
-
-```json
-{
-  "id": "P-example",
-  "planning_version": 1,
-  "status_workflow": "draft",
-  "status": "OPTIMAL",
-  "engine": "cp_sat",
-  "solver_version": "full",
-  "planning_date": "2026-09-14",
-  "strict_status": "INFEASIBLE",
-  "recovery_status": "OPTIMAL",
-  "mode": "recovery",
-  "recovery_partial": true,
-  "elapsed_seconds": 0.5,
-  "message": "Strict scheduling was proven infeasible. This is the best valid partial schedule under the recovery objective hierarchy.",
-  "objective_components": {},
-  "validation": {"valid": true, "constraint_results": []},
-  "allocations": [],
-  "schedule_details": [],
-  "deferred_requests": [],
-  "changes": []
-}
-```
-
-This is an illustrative shape, not a solver result. A publishable successful response contains the complete nonempty allocation list and changed/new allocations. Infeasible/unavailable results have no allocations and cannot be published. The route only stores successful proposals.
-
-An allocation contains:
-
-```json
-{
-  "request_id": "R03",
-  "start": "2026-09-14T02:30:00+08:00",
-  "end": "2026-09-14T03:30:00+08:00",
-  "engineer_id": "E03",
-  "equipment_ids": ["Q03"],
-  "locked": true
-}
-```
-
-For manual checking and staging, send each active allocation as `request_id`, `start`, `engineer_id` and `locked`. The server derives the end time and exact equipment requirement rather than trusting them from the browser. A manual check returns all structured issues without storing a proposal. A valid manual proposal can use the existing publish route.
-
-The solver route optionally accepts locks:
-
-```json
-{
-  "locked_allocations": [
-    {"request_id": "R03", "start": "2026-09-14T02:55:00+08:00", "engineer_id": "E03", "locked": true}
+  "run_id": "run-ps1-20260918-01",
+  "instance_id": "inst-public-01",
+  "scenario": "A",
+  "solver_status": "OPTIMAL",
+  "elapsed_seconds": 12.4,
+  "workload_complete": true,
+  "workload_summary": {
+    "total_activities": 54,
+    "fully_scheduled": 54,
+    "total_workload_required": 192,
+    "total_yield_delivered": 192
+  },
+  "score": {
+    "official_penalty": 25.2,
+    "components": {
+      "P_activity_overrun_penalty": 25.2,
+      "V_location_excess_slots": 0,
+      "E_eclo_access_count": 0
+    },
+    "contract_overrun_days": 28,
+    "contracts_overrunning": 3
+  },
+  "eclo_windows": {
+    "ALP": {"start_week": null, "end_week": null},
+    "BET": {"start_week": null, "end_week": null}
+  },
+  "validation": {
+    "provenance": "validator_unavailable",
+    "local_checks_passed": true,
+    "rule_results": {
+      "full_workload": "PASS",
+      "access_yield": "PASS",
+      "one_access_per_activity_week": "PASS",
+      "planned_start": "PASS",
+      "precedence": "PASS",
+      "core_occupancy": "PASS",
+      "legal_possession_mix": "PASS",
+      "possession_capacity": "PASS",
+      "buffers_and_live_mirroring": "PASS",
+      "contract_weekly_caps": "PASS",
+      "contract_workfronts": "PASS",
+      "scenario_policy": "PASS"
+    }
+  },
+  "artifacts": [
+    "/api/ps1/runs/run-ps1-20260918-01/export/SCHEDULE_ACCESS.csv",
+    "/api/ps1/runs/run-ps1-20260918-01/export/SCHEDULE_OCCUPANCY.csv",
+    "/api/ps1/runs/run-ps1-20260918-01/export/RESULTS.csv"
   ]
 }
 ```
 
-Canonical planning may lock submitted draft, approved or scheduled work because draft work is a movable formulation input. The scaffold engine retains its approved/scheduled gate. Published allocations marked `locked` are fixed; published unlocked allocations may be reshuffled.
+---
 
-## Approval and lock workflow
+### Official Scenario CSV Export Columns
 
-New requester work starts as `submitted`. Officers can mass-change unscheduled requests between `submitted` and `approved`:
+1. **`SCHEDULE_ACCESS.csv`:**
+   `activity_id,access_seq,week,eclo,access_night`
+2. **`SCHEDULE_OCCUPANCY.csv`:**
+   `activity_id,week,location_id,co_share_group`
+3. **`RESULTS.csv`:**
+   `scenario,contract_number,simulated_completion_date,overrun_days`
 
-```json
-{"request_ids": ["R03", "R04"], "approved": true}
-```
+*Rules:*
+- Exact column headers, no extra or missing columns.
+- `RESULTS.csv` contains only rows for the single evaluated scenario.
+- Date mapping: `completion_date(w) = horizon_start + (7w - 1) days`.
 
-The canonical full solver selects all non-cancelled requests permitted on the planning night. Here, workflow status `approved` means the officer has moved a draft into the manual-planning pool; the separate domain Boolean `approved` represents an existing booking commitment. Publication changes allocated work to `scheduled`. Published allocations retain an independent `locked` flag, which officers can change in bulk:
+---
 
-```json
-{"request_ids": ["R01", "R02"], "locked": false}
-```
+# Part 2: Legacy Transition API Contract (`/api`)
 
-## Publish
+The legacy `/api/...` endpoints are retained to support existing prototype UI components and historical integration tests during transition. They model a synthetic, single-night formulation (`constraints_lp_setup.md`).
 
-```json
-{"expected_version": 1}
-```
+## Legacy Routes
 
-The server verifies role, proposal state, exact current revision and the complete plan within a write transaction. Canonical automatic and manual proposals are independently checked against all nine constraints again. It saves all allocations, updates request states, increments the revision and appends an audit record together. A stale or invalid plan gets `409` without a partial write.
+| Method and route | Role | Legacy Purpose |
+|---|---|---|
+| `GET /health` | Public | Basic server readiness |
+| `GET /config` | Public | Auth mode, engine name and intentionally public Auth configuration |
+| `GET /me` | Signed in | Backend-assigned identity and role |
+| `GET /planning-snapshot` | Signed in | Legacy single-night snapshot data (`backend/app/models.py`) |
+| `POST /requests` | Requester | Create synthetic single-night request |
+| `POST /requests/{id}/cancel` | Owning requester | Withdraw an unbooked synthetic request |
+| `PATCH /requests/approval` | Officer | Mass approve or return unscheduled requests |
+| `PATCH /allocations/locks` | Officer | Persistently lock or unlock published schedule allocations |
+| `POST /conflicts/check` | Officer | Check synthetic single-night conflict rules |
+| `POST /schedule/check` | Officer | Validate positions from the manual scheduling board |
+| `POST /schedule/proposals` | Officer | Run legacy CP-SAT single-night solver (`backend/app/services/cp_sat.py`) |
+| `POST /schedule/manual-proposals` | Officer | Independently check and stage manual plan |
+| `GET /proposals` | Officer | Last ten stored feasible proposals |
+| `POST /proposals/{id}/commit` | Officer | Atomically approve and publish versioned proposal |
+| `PATCH /resources` | Officer | Add an unavailable interval or change equipment serviceability |
+| `GET /audit` | Officer | Recent local audit events |
+| `POST /demo/reset` | Demo officer only | Destructively reload synthetic seed data |
 
-Generating a proposal or appending an audit event does not change planning availability. Requests, resource updates, reset and actual publication do change the planning revision.
+---
 
-## Resource change example
+## Error Handling
 
-```json
-{
-  "kind": "engineers",
-  "id": "E01",
-  "unavailable_from": "2026-09-14T02:20:00+08:00",
-  "unavailable_to": "2026-09-14T04:30:00+08:00"
-}
-```
+Standard HTTP status codes are used:
+- `400`: Invalid request payload or missing parameters.
+- `401`: Missing or invalid authentication token.
+- `403`: Role not authorised to perform this operation.
+- `404`: Requested resource, instance, run, or export not found.
+- `409`: Stale revision or concurrency conflict.
+- `422`: Schema or parameter domain validation failure.
+- `503`: Database or solver engine unavailable.
 
-For equipment serviceability:
-
-```json
-{"kind": "equipment", "id": "Q01", "serviceable": false}
-```
-
-## Planning Snapshot and Domain Model
-
-The full planning state returned by `GET /planning-snapshot` is typed and validated by `PlanningSnapshot` in `backend/app/models.py`. It unifies:
-
-- `metadata`: Schema version, revision counter, timezone, and scope.
-- `stations`: Physical station nodes ($N01 \dots N07$).
-- `sectors`: Directed track sectors ($S01 \dots S06$), power zone mapping, and exclusive protection flags.
-- `engineering_windows`: Calendar date boundaries and open sector windows.
-- `blackouts`: Scheduled maintenance freezes and third-party restrictions ($b \in \mathcal{B}$).
-- `planning_rules`: Minute grid, transfer allowances, power transition guards, and morning buffer ($T_{\text{buffer}}$).
-- `engineers`: Personnel qualification, skills, and availability windows.
-- `equipment`: Physical equipment capacity, serviceability, and availability.
-- `resource_pools`: Cumulative shared resources ($C_r$, e.g. general technicians `TECH`).
-- `requests`: All submitted and scheduled maintenance work orders ($j \in \mathcal{J}$).
-- `committed_allocations`: Historic, locked bookings.
-- `vehicles`: Engineering vehicle fleet ($\mathcal{V}$) and predefined transit corridors.
-
-## Error handling
-
-- `401`: missing/invalid identity.
-- `403`: role not allowed.
-- `404`: unknown or inaccessible record.
-- `409`: stale state or invalid operation.
-- `422`: validation failure.
-- `503`: database or identity-provider temporarily unavailable.
-
-FastAPI's validation detail may be an array; other errors may contain a string or structured detail. `frontend/src/lib/api.js` normalises these for the UI. Do not display raw secrets or authentication tokens in errors/logs.

@@ -1,3 +1,6 @@
+# Historical Test Execution Output (Legacy Synthetic Prototype)
+# Note: Per PS1_OFFICIAL_ADOPTION_PLAN.md, synthetic test results do not certify official PS1 correctness.
+
 ..........................................sssssss                        [100%]
 =========================== short test summary info ============================
 SKIPPED [1] backend/tests/test_scheduler.py:49: OR-Tools not installed; install requirements-cpsat.txt

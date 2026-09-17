@@ -1,4 +1,9 @@
-# UI demo
+# Legacy Prototype UI Demo Mode
+
+> [!NOTE]
+> **AUTHORITATIVE SOURCE OF TRUTH: [PS1_OFFICIAL_ADOPTION_PLAN.md](../PS1_OFFICIAL_ADOPTION_PLAN.md)**  
+> This document describes the mock UI demo mode for the legacy single-night prototype (`demo-snapshot.json`).
+> For the official PS1 challenge, the frontend will consume the official PS1 API contract (`/api/ps1/...`) to support 8-CSV instance upload, multi-week timeline inspection, Scenario A/B/C comparisons, and disruption replan visualizations as specified in [PS1_OFFICIAL_ADOPTION_PLAN.md](../PS1_OFFICIAL_ADOPTION_PLAN.md).
 
 Set `UI_DEMO=true` in `.env` and restart the Python server. This option is active
 only with `APP_ENV=development` and `AUTH_MODE=demo`. Set it to `false` and restart

@@ -1,87 +1,73 @@
-# Team handoff: work in parallel without building disconnected pieces
+# Team Handoff & Workstream Alignment (PS1 Official Adoption)
 
-## First 30 minutes together
+> [!IMPORTANT]
+> **AUTHORITATIVE SOURCE OF TRUTH: [PS1_OFFICIAL_ADOPTION_PLAN.md](../PS1_OFFICIAL_ADOPTION_PLAN.md)**  
+> All work across backend, optimisation, data, frontend, and presentation must align with [PS1_OFFICIAL_ADOPTION_PLAN.md](../PS1_OFFICIAL_ADOPTION_PLAN.md).
+>
+> **Target:** First place in Problem Statement 1 (PS1).  
+> **Order of Priorities:**
+> 1. Schedule every activity's full workload (100% complete; dropping work is prohibited).
+> 2. Satisfy every official hard rule.
+> 3. Minimise the official penalty on hidden instances.
+> 4. Handle Scenarios A, B and C correctly.
+> 5. Solve reliably within a bounded runtime.
+> 6. Demonstrate useful explanations and disruption replanning.
 
-Have everyone run the unmodified repository. Open the officer profile, calculate a proposal, publish it and then view the result as a requester. Agree the request field names and API responses before anyone redesigns them.
+---
 
-One teammate creates your shared Git repository and commits this starter. Other teammates clone that same repository. You do not need a separate repository for every module.
+## 1. Workstream Ownership & Deliverables
 
-The current frontend is intentionally native JavaScript, not React. Decide once, as a team, whether to keep it for the hackathon. Do not have different people independently rewrite different pages in different frameworks.
+Per the official adoption plan, team responsibilities are divided as follows:
 
-## Suggested ownership
-
-| Stream | Owned files | First useful task | Definition of done |
+| Workstream | Main files / area | Key responsibilities | Definition of Done |
 |---|---|---|---|
-| Data / domain model | `backend/app/models.py`, `scripts/generate_synthetic_dataset.py`, `data/comprehensive_synthetic_data.json`, `constraints_lp_setup.md` | Maintain typed Pydantic models, generated master data and the 9 approved constraints | Generator validation and round-trip serialization pass |
-| Frontend | `frontend/src/pages/`, `components/`, `styles.css` | Improve request feedback and make protection vs work location unmistakable | Submitted data persists; rendered fields match the API; no scheduling rules hidden in UI |
-| Backend/rules | `backend/app/api/routes.py`, `database.py`, `services/checker.py` | Add well-defined work-compatibility rules and clear errors | Tests demonstrate allowed AND forbidden cases; revision bumps and ownership still work |
-| Optimisation | `services/cp_sat.py`, `full_validator.py`, `scheduler.py`, full-solver tests | Maintain the canonical strict/recovery solver without expanding V0/V1 beyond their teaching scope | Every constraint has solver and independent-validator coverage |
-| Auth/integration/testing | `backend/app/auth/`, `frontend/src/auth/`, CI and auth tests | Enable a real Supabase test project with two requester users and one officer | Real requester cannot call officer endpoints; no secret key reaches the browser |
+| **Data / Domain** | `backend/app/ps1/io.py`, `topology.py`, official CSVs | Ingest and normalise all 8 official CSVs; enforce composite keys `(line_code, station_id)`; calculate core footprints, buffers, Live opposite-bound mirroring and interchange crossovers | 8-file parser passes schema checks; sample core footprints and accounting reproduced without errors |
+| **Optimisation** | `backend/app/ps1/solver.py`, `validation.py` | Implement CP-SAT multi-week access, local night indexing, and possession group packing; enforce mandatory complete workload and Scenario A/B/C policies; optimise exact penalty | 100% complete workload feasible incumbent found; exact objective optimised; zero official hard violations |
+| **Backend / API** | `backend/app/ps1/models.py`, `export.py`, `api/ps1_routes.py`, `database.py` | Add PS1 instance/run/result persistence; expose `/api/ps1/` endpoints for upload, solve, progress, results, and exports; enforce transaction/revision safety | Reproducible 8-CSV upload and 3-CSV export round trip; isolated multi-tenant instance runs |
+| **Frontend** | `frontend/src/` | Build views for 8-file instance upload, scenario A/B/C comparison, timeline/occupancy visualization, and disruption replan | UI renders real PS1 multi-week data from `/api/ps1/` without embedding scheduling rules in browser |
+| **Presentation** | Slides, video script | Prepare the 3-minute demonstration video and presentation deck based on measured solver evidence | Video and slides demonstrate Scenarios A/B/C, honest bounds, and measured disruption replan |
 
-With five people, split data modeling and frontend streams. With three people, combine auth with backend, and give browser QA to the frontend owner.
+---
 
-### Shared files that need coordination
+## 2. Implementation Milestones
 
-`backend/app/models.py`, `backend/app/schemas.py`, `frontend/src/app.js`, `frontend/src/lib/api.js`, `scripts/generate_synthetic_dataset.py`, the dependency files and `.env.example` affect several streams. Assign one integrator or announce edits before changing them. The API guide is the contract; do not silently rename fields.
+1. **Milestone 1: Official Correctness (Data, Optimiser, Backend)**
+   - Import and normalise 8 CSVs.
+   - Implement complete-workload A/B/C solving and exact 3 CSV exports (`SCHEDULE_ACCESS.csv`, `SCHEDULE_OCCUPANCY.csv`, `RESULTS.csv`).
+   - *Exit evidence:* Public bundles with 100% complete workload and zero official hard violations; repeatable score reconciliation.
+2. **Milestone 2: Competitive Optimisation (Optimiser, Data, Backend)**
+   - Exact penalty objective optimisation ($P, V, E$).
+   - Greedy seed constructor, CP-SAT hints, and symmetry breaking.
+   - Targeted LNS on bottleneck location/weeks.
+   - *Exit evidence:* Superior validated scores across public and perturbed instances; measured improvement curves.
+3. **Milestone 3: Hidden-Instance Hardening (All Workstreams)**
+   - Bounded runtime execution and incumbent retention.
+   - Upload/run isolation and robust error handling.
+   - Disruption replan demonstration and submission packaging (video, repo).
+   - *Exit evidence:* Reliable hosted app accepting 8 unseen CSVs, exportable outputs, verified disruption demo.
 
-Treat the comprehensive generator and constraints document as ground truth. Keep `demo_data.json` only as the explicit scaffold-test baseline.
+---
 
-## Module boundaries
+## 3. Shared Files & Coordination Rules
 
-**Frontend calls the API.** It may validate a required field for convenience, but the backend must validate it again. It must not decide that a job is safe because a timeline rectangle looks empty.
+- **Authoritative Source:** Treat [PS1_OFFICIAL_ADOPTION_PLAN.md](../PS1_OFFICIAL_ADOPTION_PLAN.md) as the single authoritative source of truth. Historical files (`constraints_lp_setup.md`, `scripts/generate_synthetic_dataset.py`, `comprehensive_synthetic_data.json`) are retired from PS1 authority.
+- **Legacy Code Isolation:** `backend/app/api/routes.py` and `backend/app/services/cp_sat.py` are legacy transition components. All official PS1 code must reside in `backend/app/ps1/` and `backend/app/api/ps1_routes.py`.
+- **Git Branches:** Feature branches should be focused on one module or milestone task:
+  ```sh
+  git switch -c feat/ps1-io-parser
+  # work on backend/app/ps1/io.py
+  python -m pytest backend/tests/test_ps1_io.py
+  git commit -m "Implement and test 8-CSV parser"
+  ```
+- **Never Commit:** `.env`, `.venv`, local SQLite files (`*.sqlite3`), or cache directories.
 
-**Routes coordinate the workflow.** They load snapshots, authorize users, call the checker/solver, and persist proposals. They should not contain a second scheduling algorithm.
+---
 
-**Checker evaluates rules.** Input: snapshot + candidate allocations. Output: structured issues. It does not use HTTP, database state or OR-Tools.
+## 4. Key Integration Checkpoints
 
-**Solver searches.** Input: snapshot + time limit. Output: status, allocations, timings and a message. It does not publish anything.
+1. **8-CSV Parse:** Uploading the 8 official CSVs produces verified entities and topology with zero foreign key or cycle errors.
+2. **Mandatory Full Workload:** Every activity receives yield $\ge d_i$; no activities are dropped or truncated.
+3. **Scenario Correctness:** Scenario A enforces strict supply (no excess); Scenario B forbids planned-date overrun; Scenario C respects line ECLO windows and max 1 excess slot/loc-wk.
+4. **Export Integrity:** Generated CSV exports match official schemas exactly and round-trip through local validation.
+5. **Disruption Replan:** A simulated capacity outage invalidates affected possessions, triggers a replan, and produces evidenced before/after score metrics.
 
-**Authentication establishes identity.** Server-owned configuration determines whether that identity is a requester or officer. A frontend-selected role is never a real authority.
-
-## A simple Git workflow
-
-Repository owner, from the starter root:
-
-```sh
-git init -b main
-git add .
-git commit -m "Add RailPlan team starter"
-```
-
-Create an empty repository on your chosen Git host, then add its remote using the URL that host gives you. No remote repository has been created by this download.
-
-Each teammate starts a branch, for example:
-
-```sh
-git switch -c feat/cp-sat-alternatives
-# edit only your agreed module files
-python -m pytest -q
-git add backend/app/services backend/tests/test_scheduler.py
-git commit -m "Generate and validate distinct schedule alternatives"
-git push -u origin feat/cp-sat-alternatives
-```
-
-Open a pull request, ask another teammate to review it, then merge. Pull the updated `main` before starting another feature. Prefer small integrated changes to a last-minute merge of four disconnected applications.
-
-Do not upload `.env`, `.venv`, SQLite databases, caches, personal passwords or API secret keys. Share real configuration through your team's chosen secure channel, not by committing it.
-
-## Why we do not need two login applications
-
-One sign-in verifies a user. The backend returns `/api/me` with a role. The browser presents the matching pages. Both pages call the same backend and operate on the same database.
-
-Requester and officer roles are application identities. E01-E04 are maintenance personnel resources. A requester is NOT necessarily the engineer assigned to the work.
-
-## Integration checkpoints
-
-1. Requester creates a job; officer can see it after refresh.
-2. Checker identifies a hidden power/resource conflict.
-3. Solver changes the allocation when an input changes.
-4. Officer publishes; requester sees their committed result.
-5. A stale proposal fails with no partial database writes.
-6. Requester attempts to call a protected endpoint and gets `403`.
-
-All teammates should be able to run the same checks before a demo.
-
-## What sharing means
-
-A shared repository distributes source code. It does not distribute a running server or synchronise the team's laptop databases. For development, that isolation is useful. For an integrated demonstration, use one laptop/server as the source of truth and review the auth/deployment checklist before allowing remote access.

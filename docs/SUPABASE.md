@@ -1,5 +1,11 @@
 # Optional real identity with Supabase
 
+> [!NOTE]
+> **AUTHORITATIVE SOURCE OF TRUTH: [PS1_OFFICIAL_ADOPTION_PLAN.md](../PS1_OFFICIAL_ADOPTION_PLAN.md)**  
+> As established in [PS1_OFFICIAL_ADOPTION_PLAN.md](../PS1_OFFICIAL_ADOPTION_PLAN.md), identity and role enforcement in `backend/app/auth/` are **kept intact**: user authentication and server-enforced roles are independent of the scheduling domain model.
+>
+> Note: `DATASET_PATH` and single-night parameters in `.env` configure the legacy synthetic prototype. For the official PS1 challenge, instances are supplied via 8 official CSV file uploads through `/api/ps1/instances/upload`.
+
 ## Do we need this immediately?
 
 No, not for local development using synthetic data. The demo profile selector is deliberately not authentication. For an actual shared-account demonstration, the optional Supabase adapter is already wired into the same frontend/backend API flow.

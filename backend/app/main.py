@@ -7,6 +7,7 @@ from fastapi.staticfiles import StaticFiles
 from .config import Settings, ROOT
 from .database import Database
 from .db import create_engine_and_session, create_schema
+from .db.seed import seed_official_instance
 from .api.ps1_routes import router as ps1_router
 
 try:
@@ -29,6 +30,7 @@ def create_app(settings: Settings | None = None):
         db.initialize()
         if settings.app_env != "production":
             create_schema(ps1_db)
+        seed_official_instance(ps1_db, settings.official_data_path)
         yield
     app = FastAPI(title="NebulaX scheduling API", version="0.2.0", lifespan=lifespan)
     app.state.settings = settings

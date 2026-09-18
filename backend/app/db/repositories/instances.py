@@ -47,6 +47,14 @@ def create_instance_revision(
         instance = Instance(id=_id("inst"), name=name, fingerprint=input_fingerprint, created_by=created_by)
         session.add(instance)
         session.flush()
+    else:
+        existing = session.scalar(
+            select(InstanceRevision)
+            .where(InstanceRevision.input_fingerprint == input_fingerprint)
+            .order_by(InstanceRevision.revision_number.desc())
+        )
+        if existing is not None:
+            return instance, existing
     revision_number = session.scalar(
         select(InstanceRevision.revision_number)
         .where(InstanceRevision.instance_id == instance.id)

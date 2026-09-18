@@ -22,6 +22,7 @@ class Settings(BaseSettings):
     database_url: str = ""
     upload_storage_path: str = str(ROOT / "backend" / "uploads")
     dataset_path: str = str(ROOT / "data" / "comprehensive_synthetic_data.json")
+    official_data_path: str = str(ROOT / "data")
     supabase_url: str = ""
     supabase_publishable_key: str = ""
     officer_user_ids: str = ""

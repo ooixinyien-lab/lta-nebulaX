@@ -63,12 +63,16 @@ async def upload_instance(request: Request, files: list[UploadFile] = File(...),
         metadata[name] = {"filename": name, "storage_key": str(path), "sha256": fingerprint_files({name: content}), "size_bytes": len(content)}
 
     with _db(request).session() as session:
+        existing = session.scalar(select(InstanceRevision).where(InstanceRevision.input_fingerprint == fingerprint).order_by(InstanceRevision.revision_number.desc()))
+        if existing is not None:
+            instance = session.get(Instance, existing.instance_id)
+            return {"instance_id": instance.id, "revision_id": existing.id, "fingerprint": fingerprint, "validation_status": existing.validation_status, "duplicate": True, "message": "Identical CSV upload already exists"}
         instance, revision = create_instance_revision(
             session, problem, name=files[0].filename or "PS1 instance", created_by=user.id,
             input_fingerprint=fingerprint, files=metadata,
         )
         record_event(session, actor=user.id, action="instance_uploaded", entity_type="instance_revision", entity_id=revision.id, detail={"file_count": len(files)})
-        return {"instance_id": instance.id, "revision_id": revision.id, "fingerprint": fingerprint, "validation_status": revision.validation_status, "entity_counts": {"lines": len(problem.lines), "stations": len(problem.stations), "sectors": len(problem.sectors), "locations": len(problem.locations), "contracts": len(problem.contracts), "activities": len(problem.activities), "horizon_weeks": problem.parameters.horizon_weeks}}
+        return {"instance_id": instance.id, "revision_id": revision.id, "fingerprint": fingerprint, "validation_status": revision.validation_status, "duplicate": False, "entity_counts": {"lines": len(problem.lines), "stations": len(problem.stations), "sectors": len(problem.sectors), "locations": len(problem.locations), "contracts": len(problem.contracts), "activities": len(problem.activities), "horizon_weeks": problem.parameters.horizon_weeks}}
 
 
 @router.get("/instances/{instance_id}")

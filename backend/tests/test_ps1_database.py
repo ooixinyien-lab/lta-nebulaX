@@ -26,6 +26,22 @@ def test_official_instance_revision_is_relationally_persisted():
         session.close()
 
 
+def test_identical_input_fingerprint_reuses_revision():
+    database = create_engine_and_session("sqlite:///:memory:")
+    create_schema(database)
+    problem = load_problem_from_directory(Path("data"))
+    session = database._factory()
+    try:
+        fingerprint = fingerprint_files({"all.csv": b"same"})
+        first, first_revision = create_instance_revision(session, problem, name="official", created_by="tester", input_fingerprint=fingerprint)
+        second, second_revision = create_instance_revision(session, problem, name="official", created_by="tester", input_fingerprint=fingerprint)
+        assert first.id == second.id
+        assert first_revision.id == second_revision.id
+        assert second_revision.revision_number == 1
+    finally:
+        session.close()
+
+
 def test_runs_and_plans_have_optimistic_versions():
     database = create_engine_and_session("sqlite:///:memory:")
     create_schema(database)

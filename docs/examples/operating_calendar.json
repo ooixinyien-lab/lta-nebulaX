@@ -1,0 +1,23 @@
+{
+  "instance_revision_id": "replace-with-rev-id",
+  "timezone": "Asia/Singapore",
+  "assumed_calendar": true,
+  "assumptions": [
+    "All seven service dates in each planning week are eligible.",
+    "Each location has one possession group available per service date.",
+    "There are no maintenance blackouts or extra contract date restrictions.",
+    "ECLO is calendar-eligible on every date; the source scenario remains fixed.",
+    "Each contract uses at most its supplied weekly night count as distinct actual dates.",
+    "Each contract uses at most its supplied workfront count on an actual date.",
+    "Protection compatibility uses conservative_demo_v1 and is not official checker certification."
+  ],
+  "source": "example_demo",
+  "policy_version": "calendar-v1",
+  "protection_policy": "conservative_demo_v1",
+  "default_maintenance_available": true,
+  "default_location_possession_capacity": 1,
+  "default_eclo_eligible": true,
+  "location_nights": [],
+  "line_nights": [],
+  "contract_rules": []
+}

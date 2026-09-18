@@ -5,7 +5,11 @@ from typing import TypeVar
 from backend.app.domain_models import PS1Base
 
 T = TypeVar('T', bound=PS1Base)
-JSON_FIELDS = {'detail', 'validation_errors', 'rule_results', 'score_components'}
+JSON_FIELDS = {
+    'detail', 'validation_errors', 'rule_results', 'score_components',
+    'validation', 'assumptions', 'definition', 'commitments', 'options',
+    'conflicts', 'line_codes', 'location_ids',
+}
 
 
 def decode(model: type[T], row: sqlite3.Row | None) -> T | None:

@@ -217,3 +217,68 @@ class StationRow(PS1Base):
     seq: int
     is_interchange: bool
     revision_id: str
+
+
+class ScheduleBundleRecord(PS1Base):
+    table: ClassVar[str] = "schedule_bundles"
+    id: str
+    revision_id: str
+    scenario: str
+    fingerprint: str
+    validation: dict[str, Any]
+    created_by: str
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+
+
+class CalendarRevisionRecord(PS1Base):
+    table: ClassVar[str] = "calendar_revisions"
+    id: str
+    revision_id: str
+    fingerprint: str
+    timezone: str
+    assumed_calendar: bool
+    assumptions: list[str]
+    definition: dict[str, Any]
+    created_by: str
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+
+
+class CalendarAttemptRecord(PS1Base):
+    table: ClassVar[str] = "calendarisation_attempts"
+    id: str
+    bundle_id: str
+    calendar_revision_id: str
+    status: str = "QUEUED"
+    solver_status: str | None = None
+    solver_version: str = "calendar-cpsat-v1"
+    validator_version: str = "calendar-validator-v1"
+    complete: bool = False
+    preference_value: int | None = None
+    requested_time_limit: float
+    commitments: list[dict[str, Any]] = Field(default_factory=list)
+    options: dict[str, Any] = Field(default_factory=dict)
+    conflicts: list[dict[str, Any]] = Field(default_factory=list)
+    validation: dict[str, Any] | None = None
+    error_message: str | None = None
+    worker_token: str | None = None
+    started_at: datetime | None = None
+    finished_at: datetime | None = None
+    created_by: str
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+
+
+class CalendarAssignmentRecord(PS1Base):
+    table: ClassVar[str] = "calendar_assignments"
+    attempt_id: str
+    activity_id: str
+    access_seq: int
+    access_id: str
+    week: int
+    access_night: int
+    eclo: bool
+    service_date: date
+    global_night_id: str
+    contract_number: str
+    contract_description: str
+    line_codes: list[str]
+    location_ids: list[str]

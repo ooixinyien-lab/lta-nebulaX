@@ -93,6 +93,36 @@ npm run dev
 
 Vite serves `http://127.0.0.1:5173` and proxies `/api` to FastAPI. For a production-style check, run `npm run build`; FastAPI serves the built app at `/network-map` when `nebula-ui/dist/` exists.
 
+### Map fixed solver outputs to actual nights
+
+The calendar layer reads an existing `SCHEDULE_ACCESS.csv`,
+`SCHEDULE_OCCUPANCY.csv` and `RESULTS.csv` together with their matching official
+instance revision. It stores the original bytes unchanged and writes exact
+`service_date` values to separate operational records.
+
+1. Start FastAPI and the Vite UI as above, then open
+   `http://localhost:5173/calendar` or choose **Actual Night Preview**.
+2. The page restores the latest imported solver output, its matching instance,
+   the calendar used for its last attempt, and any previous valid date mapping.
+   On a first visit without an imported output, select the three output CSVs;
+   the instance revision is filled from the stored instance.
+3. Choose **Show calendar**. The web app imports any selected files, creates the
+   clearly labelled assumed demo calendar when needed, and starts date assignment
+   automatically. No separate worker terminal is required.
+
+**Advanced setup** contains source/revision overrides and optional calendar JSON
+import using [`docs/examples/operating_calendar.json`](docs/examples/operating_calendar.json).
+Refreshing the page restores stored results; it does not rerun the solver.
+The read-only week view appears only when every fixed source access receives a
+validated date. Otherwise the page displays the returned conflicts.
+
+For standalone queue processing or recovery after an interrupted server process,
+the optional worker remains available as
+`python -m backend.app.ps1.calendar_worker --once`. A fixed weekly schedule can
+be impossible under a selected operating calendar; the API then returns
+conflicts and leaves all official rows and files unchanged. `access_night`
+remains a local contract index and is displayed separately from the weekday.
+
 ## 2. Historical legacy synthetic workflow
 
 This sequence documents the retired prototype and is not a runnable current-main walkthrough while `backend.app.models` is absent:

@@ -6,7 +6,7 @@ NebulaX uses Python's built-in `sqlite3` through `backend/app/database.py`. Both
 
 Set `OFFICIAL_DATA_PATH` to a directory containing exactly the eight required input filenames, `01_LINES.csv` through `08_ACTIVITY_DETAILS.csv`. Other directory files are ignored. Startup reads all required files, validates the exact bytes using the official loader and typed domain models, then imports the entire bundle in one transaction. Missing files, invalid UTF-8, or invalid CSV data cause a clear startup error. An unsuccessful import adds no instance, input entities, file metadata, bytes, or audit event.
 
-Schema upgrades run in development, test, and production. Version 1 creates missing PS1 tables without replacing the baseline legacy tables or the PS1 layouts introduced after `c156c5a368e0ee411f0b305dfa7987995d2f5492`. It adds a schema ledger, a unique revision fingerprint index, and a table holding original CSV bytes. Existing instance/revision IDs, metadata, input rows, runs/results, plans, audit rows, and older file storage keys remain intact. Existing Alembic ledger data is left untouched. A newer unsupported schema version stops initialization rather than downgrading the file.
+Schema upgrades run in development, test, and production. Version 1 creates missing PS1 tables without replacing the baseline legacy tables or the PS1 layouts introduced after `c156c5a368e0ee411f0b305dfa7987995d2f5492`. Version 2 adds immutable solver-output bundles, operating-calendar revisions, calendarisation attempts and separate date assignments. Existing instance/revision IDs, metadata, input rows, runs/results, plans, audit rows, official file bytes and older file storage keys remain intact. Existing Alembic ledger data is left untouched. A newer unsupported schema version stops initialization rather than downgrading the file.
 
 Every connection enables foreign keys and a five-second busy timeout. Initialization enables WAL. Writers use `with db.connection(write=True) as connection`, which acquires `BEGIN IMMEDIATE`; readers use `db.connection()`. Repository functions participate in the caller's transaction and do not commit independently. An exception leaving the context rolls back the transaction. Keep validation and other long-running work outside write transactions.
 
@@ -33,14 +33,18 @@ The duplicate check and insert share the same write transaction, and unique inde
 
 New startup and upload imports store the original eight CSV byte strings in `instance_file_contents` inside SQLite. Their `instance_files.storage_key` is a logical `sqlite:<revision_id>/<filename>` reference, not a filesystem path. This removes cross-filesystem commit and orphan-file problems. Older filesystem storage keys and files are preserved, but new imports no longer use an upload directory.
 
-## Planned operational-enrichment persistence
+## Calendarisation persistence and future enrichments
 
-The workflow enrichments are not part of schema version 1 yet. Their persistence must extend, not mutate, the official instance boundary:
+Schema version 2 implements the fixed-output calendarisation boundary:
 
-- `enrichment_revisions` links an immutable calendar/recurrence/emergency revision to one official instance revision and records provenance/fingerprint;
-- calendar/global-night rows store Singapore service dates, eligibility/capacity, source and assumption flags;
+- `schedule_bundles` and child tables preserve the exact three uploaded output byte strings, hashes and typed rows against one official instance revision;
+- `calendar_revisions` stores an immutable typed Singapore calendar definition, assumptions and fingerprint;
+- `calendarisation_attempts` separates queue state from CP-SAT status and records commitments, options, the secondary date preference, validation, structured conflicts and worker ownership;
+- `calendar_assignments` stores `service_date`/`global_night_id` separately and points back to the immutable source access identity.
+
+The remaining enrichment persistence is planned:
+
 - recurrence policies store composite asset keys, `max_interval_days`, last verified completion, effective dates and a versioned job template; generated jobs use deterministic IDs and retain their source policy occurrence;
-- operational access rows add persistent access IDs, exact service dates, state/lock and source without adding columns to stored official CSV rows;
 - replans reference baseline/current revisions, `as_of`, frozen facts, typed changes, selected A/B/C policy, score tolerance and churn components;
 - manual-edit drafts and conflict reports are versioned separately from published plans; preflight is read-only, while save/repair revalidates inside an optimistic transaction; and
 - explanation fact packs record the referenced run/revision and deterministic evidence. Chat audit/retention stores provider/template/tool provenance with redaction and must not store credentials.
@@ -53,7 +57,7 @@ The compatibility baseline is `c156c5a368e0ee411f0b305dfa7987995d2f5492`. The la
 
 PS1 startup does not require `DATASET_PATH`. To explicitly initialize legacy state, construct `Database(database_path, dataset_path)` and call `initialize(seed_legacy=True)`. Explicit reset still uses `db.seed(connection)` within a write transaction. It increments the legacy revision and resets only legacy tables; it cannot erase PS1 records or PS1 audit events. Calling `snapshot()` before legacy state exists gives an explicit initialization error.
 
-The deleted `backend.app.models` module is a pre-existing limitation: the baseline legacy router/solver cannot import it. The app logs that the legacy router is unavailable. This refactor does not restore the legacy solver or certify the historical API as operational. PS1 run endpoints persist queue/progress/results; they do not introduce a solver worker or claim official validation.
+The deleted `backend.app.models` module is a pre-existing limitation: the baseline legacy router/solver cannot import it. The app logs that the legacy router is unavailable. This refactor does not restore the legacy solver or certify the historical API as operational. PS1 weekly run endpoints persist queue/progress/results but still have no weekly-solver worker. The separate `calendar_worker` processes date assignments only.
 
 ## Verification (19 September 2026)
 
@@ -65,7 +69,7 @@ python -m pytest backend/tests/test_data_layer.py backend/tests/test_ps1_databas
 
 Result: **45 passed** (21 official data-layer, 12 database, 12 startup/upload tests), with one third-party Starlette/AnyIO deprecation warning. Coverage includes entity counts, round trips, fresh/repeated startup, missing/invalid inputs, changed bundles, concurrent duplicate uploads/startups, rollback after partial writes, original SQLite layouts and stored-data preservation, repeated accesses, results, concurrent worker claims, optimistic plan conflicts, and legacy reset isolation.
 
-This result predates the planned enrichment tables and does not claim coverage for calendarisation, recurrence, churn, manual drafts or chatbot audit. Their acceptance tests are specified in [TEST_REPORT.md](TEST_REPORT.md).
+Calendarisation verification is now in `backend/tests/test_ps1_calendarisation.py`. Recurrence, churn, manual drafts and chatbot audit remain future work.
 
 A separate differential check executed the exact baseline `database.py` from Git against the replacement: initial seeded snapshots, catalog updates, revision bumps, audit writes, and reset snapshots matched.
 

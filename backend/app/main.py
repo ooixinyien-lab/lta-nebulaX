@@ -9,6 +9,7 @@ from .config import Settings, ROOT
 from .database import Database
 from .db.seed import seed_official_instance
 from .api.ps1_routes import router as ps1_router
+from .api.ps1_calendar_routes import router as ps1_calendar_router
 from .api.ps1_network_routes import router as ps1_network_router
 
 
@@ -59,6 +60,7 @@ def create_app(settings: Settings | None = None):
         app.include_router(router)
     app.include_router(ps1_router)
     app.include_router(ps1_network_router)
+    app.include_router(ps1_calendar_router)
     if ps1_ui_router is not None:
         app.include_router(ps1_ui_router)
     app.mount("/static", StaticFiles(directory=ROOT / "frontend"), name="static")
@@ -72,6 +74,7 @@ def create_app(settings: Settings | None = None):
 
         @app.get("/network-map", include_in_schema=False)
         @app.get("/network-map/{path:path}", include_in_schema=False)
+        @app.get("/calendar", include_in_schema=False)
         def network_map_page(path: str = ""):
             target_file = nebula_dist / path if path else nebula_dist / "index.html"
             if target_file.is_file():

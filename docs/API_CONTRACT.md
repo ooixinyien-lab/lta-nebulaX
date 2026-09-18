@@ -17,7 +17,7 @@ Base path: `/api/ps1`. Supports the official PS1 workflow and the separately ide
 
 ### Implemented persistence endpoints
 
-The current persistence implementation provides upload, instance metadata, queued runs, progress, and stored results. Routes marked **Planned** below are the agreed target contract; documentation does not imply that a solver worker, export endpoint, enrichment workflow, chatbot or official validator already exists.
+The current persistence implementation provides upload, instance metadata, queued runs, stored weekly results, immutable three-output bundle import, calendar revisions, queued calendarisation and stored exact-date mappings. Routes marked **Planned** below remain target contracts; documentation does not imply that a weekly solver worker, export endpoint, recurrence/replanning workflow, chatbot or official validator already exists.
 
 Upload accepts exactly eight multipart `files` parts with the required official filenames. A new validated bundle returns HTTP 201 with `instance_id`, `revision_id`, `fingerprint`, `validation_status`, `duplicate: false`, and `entity_counts`. An identical bundle, including the startup bundle, returns HTTP 409 with `detail.message`, `detail.instance_id`, `detail.revision_id`, and `detail.fingerprint`. Invalid or incomplete bundles return HTTP 422. Rejected uploads make no database, audit, or stored-file changes. See [SQLite import and compatibility details](DATABASE.md).
 
@@ -32,9 +32,15 @@ Upload accepts exactly eight multipart `files` parts with the required official 
 | Implemented queue contract | `POST /api/ps1/solve` | Queue one A/B/C weekly solve | Current fields plus target `run_mode`, `enrichment_revision_id?`, `baseline_run_id?` and `as_of?`; returns run and revision IDs. |
 | Implemented | `GET /api/ps1/runs/{id}/progress` | Read solver phase/progress | Status, phase, elapsed time, complete-workload flag and incumbent score. |
 | Implemented | `GET /api/ps1/runs/{id}/results` | Read stored weekly results | Typed access/occupancy/results plus target operational summaries where applicable. |
+| Implemented | `POST /api/ps1/schedule-bundles` | Import fixed solver output | Multipart exact three official output files plus `instance_revision_id`; validates and preserves their original bytes. |
+| Implemented | `GET /api/ps1/schedule-bundles/{id}` | Inspect a fixed source | Returns immutable source metadata, stable access IDs, horizon and validation. |
+| Implemented | `GET /api/ps1/calendar-preview/context` | Restore preview setup | Authenticated, read-only latest imported source, matching instance/calendar and latest/last complete attempt IDs. Optional `bundle_id` explicitly selects another source. Never imports sample files or starts a solve. |
+| Implemented (calendar only) | `POST /api/ps1/enrichments` | Create an operating calendar revision | Typed calendar definition tied to one instance revision. |
+| Implemented | `POST /api/ps1/enrichments/demo-calendar` | Create explicit demo availability | Returns a revision with `assumed_calendar=true` and all assumptions. |
+| Implemented | `GET /api/ps1/enrichments/{id}` | Read a calendar revision | Returns immutable definition and fingerprint. |
+| Implemented queue contract | `POST /api/ps1/schedule-bundles/{id}/calendarize` | Queue exact-date assignment | Keeps every source row fixed; accepts calendar revision, commitments and bounded date-solver options. |
+| Implemented | `GET /api/ps1/calendarisations/{id}` | Read calendarisation state/result | Returns complete validated operational assignments or structured conflicts, plus the separate earlier-date preference value; never partial dates. |
 | Planned | `GET /api/ps1/runs/{id}/export/{filename}` | Download an exact official artifact | Reject unless `official_export_eligible=true`; filename is one of the exact three official names. |
-| Planned | `POST /api/ps1/enrichments` | Create a versioned operational input | Calendar, recurrence policies and ad-hoc/emergency jobs; returns enrichment revision and validation. |
-| Planned | `POST /api/ps1/runs/{id}/calendarize` | Assign exact global nights | Calendar revision and pins; returns operational accesses with `service_date`, provenance and date-level validation. |
 | Planned | `POST /api/ps1/replans` | Freeze history and solve a dynamic update | Baseline run/revisions, selected scenario, `as_of`, typed changes and optional score-degradation tolerance. |
 | Planned | `GET /api/ps1/replans/{id}/diff` | Compare baseline and replan | Frozen/changed/unaffected/new accesses, scenario score delta, churn decomposition and causes. |
 | Planned | `POST /api/ps1/runs/{id}/edits/preflight` | Validate a drag/move draft | Access ID, proposed week/date/pin and revision; returns structured hard conflicts, warnings and score/churn delta without mutation. |
@@ -132,6 +138,17 @@ Upload accepts exactly eight multipart `files` parts with the required official 
 - Manual preflight never writes. Each conflict includes `severity`, stable `rule_code`, `activity_ids`, `service_dates`, `location_ids`, `capacity_delta`, `message` and optional alternatives. Save and repair require the same current revision and repeat complete validation.
 - Explanation responses include a deterministic fact pack and fallback summary even when no language-model provider is configured. Chat responses include cited run/activity/location IDs, tool/provenance metadata and an uncertainty field. Chat tools are read-only and caller-scoped.
 - Operational infeasibility returns no newly published plan. The last validated publication remains current.
+
+Calendar jobs are executed outside request transactions. After persisting a queued
+attempt, the web API schedules its execution in a background thread, so the preview
+requires no separate worker terminal. The same conditional claim prevents the web
+task and an optional CLI worker from executing an attempt twice. Run one queued job
+manually with `python -m backend.app.ps1.calendar_worker --once`, or leave the worker
+running without `--once` for standalone processing or server-interruption recovery.
+Both execution paths assign dates only; they never call the weekly PS1 solver.
+Queue status and CP-SAT status are returned separately.
+Expired worker leases are marked failed only after the requested solve budget plus
+a grace period; an active worker's attempt is not reset.
 
 ---
 

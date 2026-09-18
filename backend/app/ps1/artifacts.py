@@ -3,8 +3,9 @@
 from __future__ import annotations
 
 import csv
+from io import StringIO
 from pathlib import Path
-from typing import TypeVar
+from typing import TextIO, TypeVar
 
 from pydantic import ValidationError
 
@@ -24,6 +25,26 @@ class ArtifactFormatError(ValueError):
 RowT = TypeVar("RowT", bound=PS1Base)
 
 
+def _read_rows_stream(
+    stream: TextIO,
+    artifact_name: str,
+    expected_header: list[str],
+    row_type: type[RowT],
+) -> list[RowT]:
+    reader = csv.DictReader(stream)
+    if reader.fieldnames != expected_header:
+        raise ArtifactFormatError(
+            f"{artifact_name} header {reader.fieldnames} does not match "
+            f"official schema {expected_header}"
+        )
+    try:
+        return [row_type.model_validate(row) for row in reader]
+    except ValidationError as exc:
+        raise ArtifactFormatError(
+            f"{artifact_name} contains an invalid row: {exc}"
+        ) from exc
+
+
 def _read_rows(
     path: Path | str,
     expected_header: list[str],
@@ -31,18 +52,20 @@ def _read_rows(
 ) -> list[RowT]:
     artifact_path = Path(path)
     with artifact_path.open(encoding="utf-8", newline="") as stream:
-        reader = csv.DictReader(stream)
-        if reader.fieldnames != expected_header:
-            raise ArtifactFormatError(
-                f"{artifact_path.name} header {reader.fieldnames} does not match "
-                f"official schema {expected_header}"
-            )
-        try:
-            return [row_type.model_validate(row) for row in reader]
-        except ValidationError as exc:
-            raise ArtifactFormatError(
-                f"{artifact_path.name} contains an invalid row: {exc}"
-            ) from exc
+        return _read_rows_stream(stream, artifact_path.name, expected_header, row_type)
+
+
+def _read_rows_bytes(
+    content: bytes,
+    artifact_name: str,
+    expected_header: list[str],
+    row_type: type[RowT],
+) -> list[RowT]:
+    try:
+        text = content.decode("utf-8-sig")
+    except UnicodeDecodeError as exc:
+        raise ArtifactFormatError(f"{artifact_name} is not valid UTF-8") from exc
+    return _read_rows_stream(StringIO(text, newline=""), artifact_name, expected_header, row_type)
 
 
 def read_access_schedule(path: Path | str) -> list[AccessScheduleRow]:
@@ -70,6 +93,39 @@ def read_results(path: Path | str) -> list[ScenarioResultRow]:
 
     return _read_rows(
         path,
+        ["scenario", "contract_number", "simulated_completion_date", "overrun_days"],
+        ScenarioResultRow,
+    )
+
+
+def read_access_schedule_bytes(content: bytes) -> list[AccessScheduleRow]:
+    """Read uploaded access bytes without rewriting the immutable artifact."""
+
+    return _read_rows_bytes(
+        content,
+        "SCHEDULE_ACCESS.csv",
+        ["activity_id", "access_seq", "week", "eclo", "access_night"],
+        AccessScheduleRow,
+    )
+
+
+def read_occupancy_schedule_bytes(content: bytes) -> list[OccupancyScheduleRow]:
+    """Read uploaded occupancy bytes without rewriting the immutable artifact."""
+
+    return _read_rows_bytes(
+        content,
+        "SCHEDULE_OCCUPANCY.csv",
+        ["activity_id", "week", "location_id", "co_share_group"],
+        OccupancyScheduleRow,
+    )
+
+
+def read_results_bytes(content: bytes) -> list[ScenarioResultRow]:
+    """Read uploaded result bytes without rewriting the immutable artifact."""
+
+    return _read_rows_bytes(
+        content,
+        "RESULTS.csv",
         ["scenario", "contract_number", "simulated_completion_date", "overrun_days"],
         ScenarioResultRow,
     )

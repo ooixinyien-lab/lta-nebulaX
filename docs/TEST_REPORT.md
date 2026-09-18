@@ -40,15 +40,20 @@ Verification date: **19 September 2026**.
 python -m pytest backend/tests/test_data_layer.py backend/tests/test_ps1_scoring_validation.py backend/tests/test_ps1_solver.py -q
 ```
 
-Result: **39 passed** (21 data/topology/I/O tests and 18 scoring/validation/solver tests). This establishes local adopted-rule coverage, not parity with the unavailable official checker. The five operational enrichments are planned and are not included in this result.
+Result before calendarisation: **39 passed** (21 data/topology/I/O tests and 18 scoring/validation/solver tests). Calendarisation adds focused fixed-output solver, validator, persistence, migration, HTTP/worker and byte-preservation tests in `backend/tests/test_ps1_calendarisation.py`. This establishes local adopted-rule coverage, not parity with the unavailable official checker.
+
+The current targeted backend command, including database, startup and network API coverage,
+passes **83 tests**. The modern UI passes **11 Vitest tests**, `npm run build`,
+and `npm run lint`; lint reports two pre-existing warnings in
+`RailwayNetworkDiagram.jsx` and `ScheduleDashboard.jsx`.
 
 ---
 
-## 3. Operational Enrichment Acceptance Matrix (Planned)
+## 3. Operational Enrichment Acceptance Matrix
 
 | Area | Required cases |
 |---|---|
-| Global nights | Week boundary/timezone; local-night independence; shared group equality; ineligible/closed dates; date-level capacity/protection; infeasible date subproblem feeding weekly repair. |
+| Global nights (implemented for fixed output) | Week/date boundaries; local-night independence; fixed shared-group equality; ineligible/closed dates; nightly capacity/workfront/protection; exact source-byte retention; infeasible fixed sources return conflicts without repair. |
 | Recurrence | Composite interchange key; deterministic IDs; carry-in/out; early service; policy revision/suspension; missing template; impossible cadence with no dropped job. |
 | Dynamic updates | Emergency insertion; capacity/calendar outage; remaining-yield credit; each A/B/C policy; zero/default score tolerance; explicit tolerance; persistent access matching; label symmetry. |
 | Manual moves | Frozen past, release/deadline/precedence, possession mix/capacity/protection, ECLO window, workfront, recurrence gap, warnings, stale revision and transactional rollback. |

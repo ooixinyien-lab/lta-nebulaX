@@ -5,27 +5,14 @@ and FootprintCache into rich presentation-ready models for the React Network Map
 """
 from __future__ import annotations
 
-from pathlib import Path
 from typing import Any
-from sqlalchemy import select
-from sqlalchemy.orm import Session
 
-from backend.app.config import ROOT, Settings
-from backend.app.db.models import (
-    ActivityRow,
-    ContractRow,
-    Instance,
-    InstanceRevision,
-    LineRow,
-    LocationRow,
-    ParameterRow,
-    SectorRow,
-    StationRow,
-)
+from backend.app.config import Settings
+from backend.app.database import Database
+from backend.app.db.repositories.instances import load_revision
 from backend.app.domain_models import ProblemInstance
-from backend.app.io import load_problem_from_directory
 from backend.app.network_schedule import NetworkScheduleSource, get_schedule_source
-from backend.app.topology import FootprintCache, NetworkTopology
+from backend.app.topology import FootprintCache
 
 
 class NetworkMapService:
@@ -33,48 +20,57 @@ class NetworkMapService:
 
     def __init__(
         self,
-        db_session_factory: Any,
+        database: Database,
         settings: Settings | None = None,
         schedule_source: NetworkScheduleSource | None = None,
     ) -> None:
-        self.db_session_factory = db_session_factory
+        self.database = database
         self.settings = settings or Settings()
-        self.schedule_source = schedule_source or get_schedule_source(db_session_factory)
+        self.schedule_source = schedule_source or get_schedule_source(database)
         self._problem: ProblemInstance | None = None
         self._footprint_cache: FootprintCache | None = None
+        self._problem_revision_id: str | None = None
+
+    def _latest_revision(self) -> tuple[str, int] | None:
+        with self.database.connection() as connection:
+            row = connection.execute(
+                """SELECT id,revision_number FROM instance_revisions
+                   WHERE validation_status='VALID'
+                   ORDER BY created_at DESC,revision_number DESC,id DESC LIMIT 1"""
+            ).fetchone()
+        if row is None:
+            return None
+        return row["id"], row["revision_number"]
 
     def _get_problem_and_cache(self) -> tuple[ProblemInstance, FootprintCache]:
-        if self._problem is None or self._footprint_cache is None:
-            data_dir = Path(self.settings.official_data_path)
-            if not data_dir.is_dir():
-                data_dir = ROOT / "data"
-            self._problem = load_problem_from_directory(data_dir)
+        latest = self._latest_revision()
+        if latest is None:
+            raise RuntimeError("No validated PS1 instance revision is available")
+        revision_id, _revision_number = latest
+        if self._problem_revision_id != revision_id or self._problem is None:
+            with self.database.connection() as connection:
+                self._problem = load_revision(connection, revision_id)
             self._footprint_cache = FootprintCache(self._problem)
+            self._problem_revision_id = revision_id
         return self._problem, self._footprint_cache
 
     def get_context(self) -> dict[str, Any]:
         """Bootstrap information for the Network Map client."""
         scenarios = self.schedule_source.get_available_scenarios()
-        with self.db_session_factory.session() as session:
-            rev = session.scalar(
-                select(InstanceRevision)
-                .order_by(InstanceRevision.created_at.desc(), InstanceRevision.revision_number.desc())
-                .limit(1)
-            )
-            revision_id = rev.id if rev else "default-rev"
-            revision_num = rev.revision_number if rev else 1
-
-            horizon_start = "2027-01-04"
-            horizon_weeks = 30
-            if rev:
-                params = session.scalars(
-                    select(ParameterRow).where(ParameterRow.revision_id == rev.id)
-                ).all()
-                for p in params:
-                    if p.key == "horizon_start":
-                        horizon_start = p.value
-                    elif p.key == "horizon_weeks":
-                        horizon_weeks = int(p.value)
+        latest = self._latest_revision()
+        revision_id, revision_num = latest or ("default-rev", 1)
+        horizon_start = "2027-01-04"
+        horizon_weeks = 30
+        if latest is not None:
+            with self.database.connection() as connection:
+                params = dict(
+                    connection.execute(
+                        "SELECT key,value FROM instance_parameters WHERE revision_id=?",
+                        (revision_id,),
+                    )
+                )
+            horizon_start = params.get("horizon_start", horizon_start)
+            horizon_weeks = int(params.get("horizon_weeks", horizon_weeks))
 
         source_type = "sample_outputs" if any(s.source == "mock" for s in scenarios if s.available) else "solver"
         return {
@@ -99,31 +95,12 @@ class NetworkMapService:
 
     def get_topology(self) -> dict[str, Any]:
         """Return logical network topology (lines, stations, sectors, locations)."""
-        with self.db_session_factory.session() as session:
-            rev = session.scalar(
-                select(InstanceRevision)
-                .order_by(InstanceRevision.created_at.desc(), InstanceRevision.revision_number.desc())
-                .limit(1)
-            )
-            rid = rev.id if rev else None
-
-            line_rows = session.scalars(
-                select(LineRow).where(LineRow.revision_id == rid) if rid else select(LineRow)
-            ).all()
-            stn_rows = session.scalars(
-                select(StationRow).where(StationRow.revision_id == rid).order_by(StationRow.seq) if rid else select(StationRow).order_by(StationRow.seq)
-            ).all()
-            sec_rows = session.scalars(
-                select(SectorRow).where(SectorRow.revision_id == rid).order_by(SectorRow.seq) if rid else select(SectorRow).order_by(SectorRow.seq)
-            ).all()
-            loc_rows = session.scalars(
-                select(LocationRow).where(LocationRow.revision_id == rid) if rid else select(LocationRow)
-            ).all()
+        problem, _cache = self._get_problem_and_cache()
 
         return {
             "lines": [
                 {"line_code": r.line_code, "line_name": r.line_name}
-                for r in line_rows
+                for r in problem.lines
             ],
             "stations": [
                 {
@@ -132,7 +109,7 @@ class NetworkMapService:
                     "seq": r.seq,
                     "is_interchange": r.is_interchange,
                 }
-                for r in stn_rows
+                for r in sorted(problem.stations, key=lambda item: (item.line_code, item.seq))
             ],
             "sectors": [
                 {
@@ -143,7 +120,7 @@ class NetworkMapService:
                     "seq": r.seq,
                     "is_shared": r.is_shared,
                 }
-                for r in sec_rows
+                for r in sorted(problem.sectors, key=lambda item: (item.line_code, item.seq))
             ],
             "locations": [
                 {
@@ -153,7 +130,7 @@ class NetworkMapService:
                     "bound": r.bound,
                     "supply_capacity": r.supply_capacity,
                 }
-                for r in loc_rows
+                for r in problem.locations
             ],
         }
 

@@ -19,10 +19,18 @@ class Settings(BaseSettings):
     ui_demo: bool = False
     solver_time_limit_seconds: float = 8.0
     database_path: str = str(ROOT / "backend" / "nebulax.sqlite3")
+    database_url: str = ""
+    upload_storage_path: str = str(ROOT / "backend" / "uploads")
     dataset_path: str = str(ROOT / "data" / "comprehensive_synthetic_data.json")
+    official_data_path: str = str(ROOT / "data")
     supabase_url: str = ""
     supabase_publishable_key: str = ""
     officer_user_ids: str = ""
+
+    @property
+    def effective_database_url(self) -> str:
+        """Return the configured server URL or a local SQLite fallback."""
+        return self.database_url or f"sqlite:///{Path(self.database_path).resolve().as_posix()}"
 
     @property
     def officer_ids(self) -> set[str]:
@@ -34,7 +42,7 @@ class Settings(BaseSettings):
             raise ValueError("Demo identity is NOT authentication. Refusing production + demo mode.")
         if not 0.1 <= self.solver_time_limit_seconds <= 60:
             raise ValueError("Solver time limit must be between 0.1 and 60 seconds")
-        if not Path(self.dataset_path).is_file():
+        if not self.database_url and not Path(self.dataset_path).is_file():
             raise ValueError(f"Dataset file does not exist: {self.dataset_path}")
         if self.auth_mode == "supabase":
             if not self.supabase_url.startswith("https://"):

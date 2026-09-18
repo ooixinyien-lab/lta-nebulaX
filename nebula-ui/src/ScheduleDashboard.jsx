@@ -330,29 +330,12 @@ export default function ScheduleDashboard({
   };
 
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col font-sans select-none">
-      
-      {/* ========================================================================= */}
-      {/* 1. HEADER BAR */}
-      {/* ========================================================================= */}
-      <header className="border-b border-slate-800 bg-slate-950 px-6 py-3 flex flex-wrap items-center justify-between gap-4 sticky top-0 z-40 shadow-2xl">
-        <div className="flex items-center gap-4">
-          <div className="bg-cyan-500 text-slate-950 font-black px-2.5 py-1 rounded text-lg tracking-wider shadow-lg shadow-cyan-500/20">
-            NEBULA X
-          </div>
-          <div>
-            <h1 className="text-base font-bold text-slate-100 tracking-tight flex items-center gap-2">
-              Weekly Possession Dispatch Board
-              <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-slate-900 border border-slate-800 text-cyan-400 flex items-center gap-1">
-                <Move size={10} /> DRAG &amp; MOVE ACTIVE
-              </span>
-            </h1>
-            <p className="text-xs text-slate-400 font-mono">
-              SCHEDULE_ACCESS • SCHEDULE_OCCUPANCY • RESULTS
-            </p>
-          </div>
-        </div>
-
+    <div className="min-h-full bg-slate-950 text-slate-100 flex flex-col font-sans select-none">
+      {/* Page controls stay below the shared application header. */}
+      <div
+        className="schedule-controls border-b border-slate-800 bg-slate-950 px-6 py-3 flex flex-wrap items-center justify-between gap-4"
+        aria-label="Schedule matrix controls"
+      >
         {/* Planning Horizon Scrubber */}
         <div className="flex items-center bg-slate-900 border border-slate-800 rounded-xl p-1 shadow-inner">
           <button
@@ -450,7 +433,7 @@ export default function ScheduleDashboard({
             </button>
           </div>
         </div>
-      </header>
+      </div>
 
       {/* ========================================================================= */}
       {/* 2. REAL-TIME CONFLICT STATUS BANNER */}

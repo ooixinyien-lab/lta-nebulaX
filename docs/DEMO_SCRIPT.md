@@ -5,7 +5,7 @@
 > All presentations, walkthroughs, and demo videos must reflect [PS1_OFFICIAL_ADOPTION_PLAN.md](../PS1_OFFICIAL_ADOPTION_PLAN.md).
 >
 > **Target:** First place in Problem Statement 1 (PS1).
-> The demonstration must showcase full activity workload satisfaction, Scenario A/B/C performance, official scoring, and disruption replanning.
+> The demonstration must showcase full workload, Scenario A/B/C performance, exact global nights, recurrence, low-churn emergency replanning, safe manual edits and grounded explanations without confusing operational extensions with official scoring.
 
 ---
 
@@ -23,18 +23,40 @@ This script outlines the official 3-minute hackathon video and judge presentatio
 - **Scenario B (Strict Schedule):** Demonstrate strict adherence to planned completion dates (zero overrun permitted); show how flexible location supply and ECLO accesses are leveraged at minimal penalty ($7V + 5E$).
 - **Scenario C (Balanced Trade-Off):** Demonstrate joint optimisation of overrun, supply excess (max 1 slot/loc-wk), and line-specific ECLO windows ($\le 2$ weeks per line) to minimise $P + 7V + 5E$.
 
-### 3. Disruption Replanning Demonstration (Winning Differentiator)
-- Inject an unexpected disruption: reduce nominal possession supply at a critical interchange bottleneck.
-- Automatically identify the specific invalidated location possessions.
-- Trigger the replan: show the solver re-routing and rescheduling affected activities while preserving unaffected commitments where possible.
-- Present the before/after operational comparison and objective score breakdown grounded in binding constraints.
+### 3. Calendar Nights and Recurring Maintenance
 
-### 4. Verification and Official Exports
+- Load an explicit `Asia/Singapore` operating calendar and show the second solver mapping weekly accesses to actual `service_date` values.
+- Point out that `access_night` remains a local contract/type/week index and is not the weekday.
+- Add a station or sector recurrence policy with `max_interval_days` and a last completion date. Show deterministic generated jobs, shared possession consumption and cadence compliance.
+- Mark the view as operational and show that generated IDs/`service_date` do not enter the official CSV bundle.
+
+### 4. Emergency Replanning with Minimum Churn
+
+- Set an `as_of` instant, then inject an emergency job or reduce calendar/supply availability at a critical bottleneck.
+- Show completed, occurred, in-progress and locked accesses frozen before solving.
+- Trigger a replan under one selected A/B/C policy. Show that the selected scenario objective is optimised first, then churn among equally scoring plans; label an enriched run's cost operational rather than official.
+- Present frozen/unchanged/moved/new counts, absolute date movement and before/after scenario score. Pure group-label changes must not appear as churn.
+
+### 5. Manual Drag, Conflict and Repair
+
+- Drag one future access to an invalid global night. Show the server-generated rule code, conflicting activities/locations and simple reason without altering the published plan.
+- Drag to a valid night and show score/churn warnings. Save with a revision token or pin it and run complete repair of the remaining movable schedule.
+- Demonstrate that a stale or frozen-history edit is rejected.
+
+### 6. Grounded Explanation and Chat
+
+- Click a displaced activity. Show the visible auto-prompt and fact-backed answer naming the emergency/closure, binding capacity/deadline, date and score impact, and measured alternative.
+- Ask a general schedule question such as “Which station is next due for recurring maintenance?” and show cited activity/run IDs.
+- State that the chatbot is read-only and falls back to a deterministic summary; it does not validate or publish schedules.
+
+### 7. Verification and Official Exports
 - Display the independent validation results covering workload yield, legal possession mixes, buffer footprints, and contract workfronts.
+- Separately display calendar, recurrence, freeze and churn validation for the operational run.
 - Download and inspect the three generated scenario artifacts:
-  - `SCHEDULE_ACCESS.csv` (192 access rows);
+  - `SCHEDULE_ACCESS.csv` (row count depends on ECLO usage);
   - `SCHEDULE_OCCUPANCY.csv` (core location possession groups);
   - `RESULTS.csv` (simulated completion date and overrun days per contract).
+- Confirm that the official files have exact headers and no `service_date`, generated maintenance ID or chatbot content.
 
 ---
 
@@ -47,4 +69,3 @@ This script outlines the official 3-minute hackathon video and judge presentatio
 3. **Recovery review:** Review the returned status and note the 7 scheduled requests and 5 deferred requests (historical synthetic behavior).
 4. **Publish transaction:** Click **Approve & publish**; show that the backend commits all bookings atomically and bumps the planning revision.
 5. **Stale proposal rejection:** Change a resource's availability to demonstrate that older proposals are invalidated.
-

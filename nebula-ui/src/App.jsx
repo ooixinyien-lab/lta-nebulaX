@@ -1,13 +1,19 @@
 import React, { useState } from 'react';
 import { 
   Upload, CheckCircle, Download, 
-  Play, Calendar, Database, RefreshCw
+  Play, Calendar, Database, RefreshCw, Map
 } from 'lucide-react';
 import ScheduleDashboard from './ScheduleDashboard';
+import NetworkMapPage from './pages/NetworkMapPage';
 
 export default function App() {
   // Navigation & State
-  const [activeTab, setActiveTab] = useState('upload'); // 'upload' | 'matrix' | 'raw_data'
+  const [activeTab, setActiveTab] = useState(() => {
+    if (typeof window !== 'undefined' && window.location.pathname.includes('network-map')) {
+      return 'network_map';
+    }
+    return 'network_map';
+  });
   const [selectedScenario, setSelectedScenario] = useState('A');
   const [isParsing, setIsParsing] = useState(false);
   const [parsedData, setParsedData] = useState(null);
@@ -69,6 +75,35 @@ export default function App() {
 
   const displayData = parsedData || mockFallbackData;
 
+  if (activeTab === 'network_map') {
+    return (
+      <div className="min-h-screen bg-slate-900 text-slate-100 flex flex-col font-sans">
+        <div className="bg-slate-950/80 border-b border-slate-800/80 px-6 py-1.5 flex items-center justify-between text-xs">
+          <div className="flex items-center gap-4">
+            <span className="flex items-center gap-1.5 text-cyan-400 font-bold">
+              <Map size={14} /> Interactive Network Map
+            </span>
+            <span className="text-slate-600">|</span>
+            <button
+              onClick={() => setActiveTab('matrix')}
+              className="text-slate-300 hover:text-cyan-300 transition flex items-center gap-1.5 font-bold"
+            >
+              <Calendar size={13} /> Schedule Matrix &amp; Drag Dispatch
+            </button>
+            <span className="text-slate-600">|</span>
+            <button
+              onClick={() => setActiveTab('upload')}
+              className="text-slate-400 hover:text-slate-200 transition flex items-center gap-1.5"
+            >
+              <Upload size={13} /> Data Ingestion
+            </button>
+          </div>
+        </div>
+        <NetworkMapPage />
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-slate-900 text-slate-100 flex flex-col font-sans">
       
@@ -95,6 +130,14 @@ export default function App() {
       {/* 2. SUB-HEADER NAVIGATION & METRICS */}
       <div className="border-b border-slate-800 bg-slate-900/50 px-6 py-2 flex items-center justify-between">
         <div className="flex gap-4 text-sm font-medium text-slate-400">
+          <button
+            onClick={() => setActiveTab('network_map')}
+            className={`flex items-center gap-2 py-1 px-3 rounded-md transition ${
+              activeTab === 'network_map' ? 'bg-slate-800 text-cyan-400' : 'hover:bg-slate-800/50'
+            }`}
+          >
+            <Map size={16} /> Interactive Network Map
+          </button>
           <button
             onClick={() => setActiveTab('upload')}
             className={`flex items-center gap-2 py-1 px-3 rounded-md transition ${

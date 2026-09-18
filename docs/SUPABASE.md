@@ -8,7 +8,7 @@
 
 ## Do we need this immediately?
 
-No, not for local development using synthetic data. The demo profile selector is deliberately not authentication. For an actual shared-account demonstration, the optional Supabase adapter is already wired into the same frontend/backend API flow.
+No, not for local development with the supplied synthetic PS1 challenge data. The demo profile selector is deliberately not authentication. For an actual shared-account demonstration, the optional Supabase adapter is wired into the backend authentication flow; canonical new UI work belongs in `nebula-ui/`.
 
 This repository uses Supabase **Auth only**. Planning records stay in the application's SQLite database. Enabling Auth does not upload your bookings to Supabase, synchronise teammates' databases, or enable Row Level Security on SQLite.
 
@@ -57,6 +57,8 @@ SOLVER_ENGINE=cp_sat
 DATASET_PATH=./data/comprehensive_synthetic_data.json
 ```
 
+`DATASET_PATH` and `SOLVER_ENGINE` above are legacy-only settings. Official startup reads `OFFICIAL_DATA_PATH`; future operational calendars, recurrence policies and emergency changes are uploaded as typed, versioned enrichment data rather than environment variables.
+
 For multiple officers, use comma-separated UUIDs. Everyone else authenticated to the configured project is treated as a requester, so restrict project membership/signup as appropriate.
 
 7. Stop and restart the Python server. The login screen now asks for email/password; demo profile buttons disappear.
@@ -74,6 +76,9 @@ No real passwords or Supabase tokens are written to SQLite. Demo profile IDs alo
 
 - Real requester can create and see only their own request records.
 - Real requester receives `403` from `/api/schedule/proposals`, `/api/conflicts/check`, resource changes and publication.
+- PS1 instance/run/enrichment reads are tenant/role scoped; only authorised planning roles may create recurrence policies, emergency revisions, locks, repairs or publications.
+- Manual preflight may be read-only, but saving/pinning a drag requires current revision authority.
+- Chat and explanation endpoints can call only role-scoped read-only schedule tools. They never inherit provider credentials in the browser and cannot bypass the separate scheduling action endpoints.
 - Editing a profile's user metadata to contain `role=officer` does not confer authority.
 - Verified allowlisted officer can plan and publish.
 - Invalid/expired tokens fail verification.
@@ -84,7 +89,7 @@ Mocked role tests are included. A real Supabase project was NOT connected or tes
 
 ## Before exposing the app beyond localhost
 
-Supabase sign-in alone does not make this a production deployment. Review HTTPS, user admission, session security, rate limits, payload limits, error handling, backups, dependency patches, restrictive network access, privacy, logging and database hosting. Use a persistent server database deployment suited to the expected load. SQLite on each developer's laptop is not a shared cloud database.
+Supabase sign-in alone does not make this a production deployment. Review HTTPS, user admission, session security, rate limits, payload limits, error handling, backups, dependency patches, restrictive network access, privacy, logging and database hosting. Chat logs/fact packs need explicit retention and redaction controls, and uploaded text must be isolated from system/tool instructions. Use a persistent server database deployment suited to the expected load. SQLite on each developer's laptop is not a shared cloud database.
 
 The app refuses `APP_ENV=production` with demo identities, but that guard is only one safeguard. It is not a production certification. There is no real track-access control in this prototype.
 

@@ -6,7 +6,7 @@
 > Per [PS1_OFFICIAL_ADOPTION_PLAN.md](../PS1_OFFICIAL_ADOPTION_PLAN.md):
 > - **Synthetic test success does not certify PS1 correctness.** The 135 passing tests below verify only the historical single-night synthetic prototype.
 > - The synthetic solver's recovery behavior (scheduling 7 of 12 requests) violates PS1's mandatory complete-workload requirement.
-> - Official PS1 verification is governed by the 7-step testing and validator loop detailed below.
+> - Official PS1 verification and the separate operational enrichment checks below must retain explicit provenance.
 
 ---
 
@@ -22,12 +22,41 @@ Per [PS1_OFFICIAL_ADOPTION_PLAN.md](../PS1_OFFICIAL_ADOPTION_PLAN.md), official 
 6. **Scenario Constraints (A, B, C):** Verify that Scenario A forbids location excess; Scenario B forbids planned date overrun; Scenario C enforces line ECLO windows ($\le 2$ weeks) and $\le 1$ excess slot per location/week.
 7. **Official Score Reconciliation:** Exact calculation of activity overrun penalty ($P$), excess slots ($V$), and ECLO count ($E$) matching the official scoring formula.
 8. **Artifact Round-Trip:** Export and re-read the 3 official CSV files (`SCHEDULE_ACCESS.csv`, `SCHEDULE_OCCUPANCY.csv`, `RESULTS.csv`).
+9. **Calendarisation:** Every access receives one eligible Singapore service date in its week; shared groups align; date-level capacity/protection and frozen pins pass.
+10. **Recurrence:** Deterministic generated jobs cover carry-in and horizon-end boundaries with no gap greater than `max_interval_days`.
+11. **Replanning/Churn:** Occurred, completed, in-progress and locked work does not move; remaining workload stays complete; each selected A/B/C score is optimised before churn.
+12. **Manual Edits:** Preflight detects every hard-rule family; stale/frozen edits fail; save revalidates; infeasible repair retains the published plan.
+13. **Explanations/Chat:** Fact packs match stored diffs/counterfactuals; tools are read-only and role-scoped; unsupported claims and provider outage use the deterministic fallback.
 
 *Validation Provenance:* The official validator tool is not present in the supplied pack; local validation reports `validator_unavailable` until the official checker is supplied by the organisers.
 
+Operational checks do not turn an enriched run into an official submission. Any generated ID or operational-only field makes the run ineligible for the exact official bundle.
+
+## 2. Active PS1 Local Verification
+
+Verification date: **19 September 2026**.
+
+```sh
+python -m pytest backend/tests/test_data_layer.py backend/tests/test_ps1_scoring_validation.py backend/tests/test_ps1_solver.py -q
+```
+
+Result: **39 passed** (21 data/topology/I/O tests and 18 scoring/validation/solver tests). This establishes local adopted-rule coverage, not parity with the unavailable official checker. The five operational enrichments are planned and are not included in this result.
+
 ---
 
-## 2. Legacy Synthetic Baseline Verification (Historical Scaffold)
+## 3. Operational Enrichment Acceptance Matrix (Planned)
+
+| Area | Required cases |
+|---|---|
+| Global nights | Week boundary/timezone; local-night independence; shared group equality; ineligible/closed dates; date-level capacity/protection; infeasible date subproblem feeding weekly repair. |
+| Recurrence | Composite interchange key; deterministic IDs; carry-in/out; early service; policy revision/suspension; missing template; impossible cadence with no dropped job. |
+| Dynamic updates | Emergency insertion; capacity/calendar outage; remaining-yield credit; each A/B/C policy; zero/default score tolerance; explicit tolerance; persistent access matching; label symmetry. |
+| Manual moves | Frozen past, release/deadline/precedence, possession mix/capacity/protection, ECLO window, workfront, recurrence gap, warnings, stale revision and transactional rollback. |
+| Explanations/chat | Displaced and unchanged activities; measured alternative; missing data; prompt injection; cross-tenant/role denial; no arbitrary SQL/action; provider timeout and deterministic fallback. |
+
+---
+
+## 4. Legacy Synthetic Baseline Verification (Historical Scaffold)
 
 Verification date: **13 September 2026**.  
 *Scope:* Legacy single-night CP-SAT solver and synthetic 9-rule validator.

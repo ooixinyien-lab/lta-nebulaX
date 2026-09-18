@@ -4,9 +4,8 @@ import { h, badge, nextDate } from './lib/format.js';
 import { loginPage } from './pages/login.js';
 import { requesterPage, newRequestPage } from './pages/requester.js';
 import { officerPage, resourcesPage } from './pages/officer.js?v=20260910-demo2';
-import { networkMap } from './components/timeline.js?v=20260915-network-map-refinements';
 
-const state = { config:null, user:null, snapshot:null, issues:[], proposal:null, audit:[], date:'2026-09-14', weekStart:'2026-09-14', weekDirection:0, page:'', viewMode:'requested', manualPlan:null, manualVersion:null, selectedSchedule:new Set(), selectedPool:new Set(), planHistoryPast:[], planHistoryFuture:[], navExpanded:false, busy:false, networkMapSelection:null };
+const state = { config:null, user:null, snapshot:null, issues:[], proposal:null, audit:[], date:'2026-09-14', weekStart:'2026-09-14', weekDirection:0, page:'', viewMode:'requested', manualPlan:null, manualVersion:null, selectedSchedule:new Set(), selectedPool:new Set(), planHistoryPast:[], planHistoryFuture:[], navExpanded:false, busy:false };
 const root = document.getElementById('app');
 
 function duration(request) { return request.phases.reduce((sum,p)=>sum+Number(p.duration_minutes),0); }
@@ -85,7 +84,6 @@ async function enter() {
   state.viewMode=state.user.role==='officer'?'requested':'booked';
   state.manualPlan=null;state.manualVersion=null;state.selectedSchedule.clear();state.selectedPool.clear();
   state.proposal=null;state.issues=[];state.audit=[];
-  state.networkMapSelection=null;
   state.weekStart=mondayOf(state.date);
   clearPlanHistory();
   await reload();
@@ -93,11 +91,11 @@ async function enter() {
 function render() {
   if (!state.user) { root.innerHTML=loginPage(state.config); return; }
   const officer=state.user.role==='officer';
-  const titles={'planner':['Engineering schedule',''],'network-map':['Network map','Inspect corridor topology, possessions and movement.'],'my-requests':['Your maintenance requests','Submit work packages and track approved allocations.'],'new-request':['Request track time','Tell the planner what you need, not just when you want it.'],'resources':['Resources & activity','Availability changes are planning changes.']};
+  const titles={'planner':['Engineering schedule',''],'my-requests':['Your maintenance requests','Submit work packages and track approved allocations.'],'new-request':['Request track time','Tell the planner what you need, not just when you want it.'],'resources':['Resources & activity','Availability changes are planning changes.']};
   const [title,subtitle]=titles[state.page]||titles[officer?'planner':'my-requests'];
   const dates=[...new Set(state.snapshot.engineering_windows.map(w=>w.date))];
   const nav=officer?[['planner','Planning workspace','<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 3v3M17 3v3M4 9h16M5 5h14a1 1 0 0 1 1 1v13H4V6a1 1 0 0 1 1-1Zm3 8h3v3H8Z"/></svg>'],['network-map','Network map','<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h16M7 4v4M17 10v4M10 16v4"/></svg>'],['resources','Resources & activity','<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8"/><path d="M12 7v5l3 2"/></svg>']]:[['my-requests','My requests','<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 4h14v16H5zM8 9h8M8 13h8M8 17h5"/></svg>'],['network-map','Network map','<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h16M7 4v4M17 10v4M10 16v4"/></svg>'],['new-request','New request','<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>']];
-  let content=state.page==='network-map'?networkMap(state):state.page==='new-request'?newRequestPage(state.snapshot):state.page==='resources'?resourcesPage(state):officer?officerPage(state):requesterPage(state);
+  let content=state.page==='new-request'?newRequestPage(state.snapshot):state.page==='resources'?resourcesPage(state):officer?officerPage(state):requesterPage(state);
   const showDatePicker=!(officer&&state.page==='planner');
   const planner=officer&&state.page==='planner';
   const conflictDetails=state.issues.map(i=>`<article><b>${h(i.code.replaceAll('_',' '))}</b><span>${i.request_ids.map(h).join(' / ')}</span><p>${h(i.message)}</p></article>`).join('');
@@ -105,7 +103,7 @@ function render() {
   const plannerActions=planner&&state.issues.length?`<span class="conflict-indicator" tabindex="0" aria-label="${visibleConflictCount} schedule conflicts">!<span class="conflict-popover"><strong>${visibleConflictCount} conflict${visibleConflictCount===1?'':'s'}</strong>${conflictDetails}</span></span>`:'';
   root.innerHTML=`<div class="app-shell"><aside class="sidebar ${state.navExpanded?'nav-expanded':''}"><a class="brand" href="#"><span class="brand-mark">N</span><span class="brand-label">NebulaX</span></a><div class="sidebar-kicker">MAINTENANCE WORKSPACE</div><nav>${nav.map(([id,label,icon])=>`<button class="nav-item ${state.page===id?'active':''}" data-nav="${id}" title="${h(label)}"><span class="nav-icon">${icon}</span><span class="nav-label">${h(label)}</span></button>`).join('')}</nav><div class="sidebar-note"><span class="status-dot"></span><strong>Fictional corridor</strong><p>Planning support only.<br>No live track access.</p></div><div class="sidebar-user"><div class="avatar">${officer?'O':'R'}</div><div class="user-copy"><strong>${h(state.user.name)}</strong><small>${officer?'Planning officer':'Requester'}</small></div><button data-action="logout" title="Sign out" aria-label="Sign out">&rarr;</button></div></aside><div class="app-main"><header class="topbar"><span>NEBULAX <span class="crumb">/ Canonical planner</span></span><div>${badge(state.config.ui_demo?'UI DEMO  /  MOCK SCHEDULE':'SYNTHETIC DATA','neutral')}${badge(state.config.auth_mode==='demo'?'LOCAL DEMO':'SUPABASE AUTH',state.config.auth_mode==='demo'?'warning':'success')}</div></header><main class="content ${planner?'planner-content':''}"><div class="page-heading"><div><div class="eyebrow dark">${officer?'OFFICER CONSOLE':'REQUESTER PORTAL'}</div><h1>${title}</h1>${subtitle?`<p>${subtitle}</p>`:''}</div><div class="page-actions">${showDatePicker?`<select id="date-picker" aria-label="Planning date">${dates.map(d=>`<option value="${d}" ${state.date===d?'selected':''}>${d}</option>`).join('')}</select>`:''}<button class="button secondary" data-action="refresh" aria-label="Refresh">&#8635;</button>${plannerActions}</div></div><div id="notice" role="alert"></div>${content}<footer class="app-footer"><span>Revision ${state.snapshot.metadata.planning_version} &middot; ${state.config.ui_demo?'Preset schedule  /  browser-saved demo  /  overlap hints only':state.config.solver_engine==='cp_sat'?'CP-SAT configured':'Tiny-demo search / not CP-SAT'}</span><span>All constraints are prototype assumptions.</span>${officer&&state.config.auth_mode==='demo'?'<button class="text-button" data-action="reset">Reset synthetic demo</button>':''}</footer></main></div></div>`;
   state.weekDirection=0;
-  if(state.page!=='network-map')requestAnimationFrame(drawScheduleLinks);
+  requestAnimationFrame(drawScheduleLinks);
   if (state.page==='new-request') updateRequestRequirements();
 }
 function drawScheduleLinks() {
@@ -130,22 +128,14 @@ async function run(task) {
   document.body.classList.add('is-busy');
   document.querySelectorAll('button').forEach(b=>b.disabled=true);
   try { const message=await task(); render(); if(message) notice(message); }
-  catch(error) { if(error.status===401) { await signOut(); state.user=null; state.networkMapSelection=null; state.issues=[]; state.audit=[]; } render(); notice(error.message,true); }
+  catch(error) { if(error.status===401) { await signOut(); state.user=null; state.issues=[]; state.audit=[]; } render(); notice(error.message,true); }
   finally { state.busy=false; document.body.classList.remove('is-busy'); }
 }
 
-function selectNetworkMapTarget(target) {
-  const type=target.hasAttribute('data-map-sector')?'sector':'station';
-  state.networkMapSelection={type,id:target.getAttribute(`data-map-${type}`)};
-  render();
-}
-
 document.addEventListener('click',event=>{
-  const mapTarget=event.target.closest?.('[data-map-sector],[data-map-station]');
-  if(mapTarget) { if(state.busy)return; selectNetworkMapTarget(mapTarget); return; }
   const el=event.target.closest('button'); if(!el||state.busy) return;
   if(el.dataset.demo) return run(async()=>{ chooseDemo(el.dataset.demo); await enter(); });
-  if(el.dataset.nav) { if(state.page===el.dataset.nav)return; if(state.page==='network-map'||el.dataset.nav==='network-map')state.networkMapSelection=null;state.page=el.dataset.nav;render();return; }
+  if(el.dataset.nav) { if(el.dataset.nav==='network-map'){ window.location.href='/network-map'; return; } if(state.page===el.dataset.nav)return; state.page=el.dataset.nav;render();return; }
   if(el.dataset.weekShift){const shift=Number(el.dataset.weekShift);state.weekDirection=Math.sign(shift);state.weekStart=addDays(state.weekStart,shift);state.date=state.weekStart;render();return;}
   if(el.dataset.scheduleDate) { state.date=el.dataset.scheduleDate;state.weekStart=mondayOf(state.date);render();return; }
   if(el.dataset.view) { state.viewMode=el.dataset.view; render(); return; }
@@ -159,20 +149,13 @@ document.addEventListener('click',event=>{
   if(el.dataset.action==='add-to-schedule')return run(async()=>{const previousPlan=clonePlan(),scheduled=new Set(state.manualPlan.map(a=>a.request_id)),selected=state.selectedPool.size?state.selectedPool:null,candidates=state.snapshot.requests.filter(r=>['approved','scheduled'].includes(r.status)&&!scheduled.has(r.id)&&(!selected||selected.has(r.id)));if(!candidates.length)return 'Select or approve at least one request first.';for(const request of candidates){const initialStart=request.preferred_start||request.earliest_start,allocation={request_id:request.id,start:initialStart,end:endAt(initialStart,duration(request)),engineer_id:request.preferred_engineer||request.eligible_engineers[0],equipment_ids:[...request.required_equipment_ids],locked:false};state.manualPlan.push(allocation);const best=bestStartOnDate(request.id,allocationDate(allocation.start));allocation.start=best;allocation.end=endAt(best,duration(request));}state.selectedPool.clear();state.proposal=null;const result=await checkManualPlan();recordPlanHistory(previousPlan);const count=conflictCount(result.issues);return `${candidates.length} approved job${candidates.length===1?'':'s'} added without moving existing work${count?`; ${count} conflict${count===1?'':'s'} need attention`:''}.`;});
   if(el.dataset.cancel) return run(async()=>{ if(!confirm('Withdraw this unbooked request?')) return; await api(`/requests/${encodeURIComponent(el.dataset.cancel)}/cancel`,{method:'POST'}); await reload(); return 'Request withdrawn.'; });
   if(el.dataset.equipment) return run(async()=>{ await api('/resources',{method:'PATCH',body:{kind:'equipment',id:el.dataset.equipment,serviceable:el.dataset.serviceable==='true'}}); await reload(); return 'Equipment updated. Previous proposals are now stale.'; });
-  if(el.dataset.action==='logout') return run(async()=>{ await signOut(); state.user=null;state.snapshot=null;state.proposal=null;state.networkMapSelection=null;state.issues=[];state.audit=[]; });
+  if(el.dataset.action==='logout') return run(async()=>{ await signOut(); state.user=null;state.snapshot=null;state.proposal=null;state.issues=[];state.audit=[]; });
   if(el.dataset.action==='refresh') return run(async()=>{ state.manualPlan=null;clearPlanHistory();await reload();return 'Latest planning data loaded.'; });
   if(el.dataset.action==='save-demo') return run(async()=>{const p=await api('/schedule/manual-proposals',{method:'POST',body:{allocations:draftPayload()}});await api(`/proposals/${p.id}/commit`,{method:'POST',body:{expected_version:p.planning_version}});state.proposal=null;state.manualPlan=null;await reload();return 'Demo schedule saved in this browser.';});
   if(el.dataset.action==='generate') return run(async()=>{const previous=clonePlan();const p=await api('/schedule/proposals',{method:'POST',body:{locked_allocations:draftPayload().filter(a=>a.locked)}});state.manualPlan=p.allocations;state.manualVersion=p.planning_version;state.proposal=p;state.issues=p.validation?.issues||p.issues||[];recordPlanHistory(previous);return p.mode==='recovery'?`Best valid partial schedule generated; ${p.deferred_requests.length} request${p.deferred_requests.length===1?'':'s'} deferred.`:'Complete solver proposal generated.';});
   if(el.dataset.action==='commit') return run(async()=>{ if(!confirm('Approve and publish this synthetic plan? This does not authorise real railway access.')) return; const p=state.proposal; await api(`/proposals/${p.id}/commit`,{method:'POST',body:{expected_version:p.planning_version}});p.status_workflow='committed';state.viewMode='booked';await reload();return 'Plan published. Requesters can refresh to see their bookings.'; });
   if(el.dataset.action==='absence') return run(async()=>{ const date=state.snapshot.engineering_windows[0].date;await api('/resources',{method:'PATCH',body:{kind:'engineers',id:'E01',unavailable_from:`${date}T02:20:00+08:00`,unavailable_to:`${date}T04:30:00+08:00`}});await reload();return 'E01 is unavailable after 02:20 on the first demo night. Recalculate the pending plan.'; });
   if(el.dataset.action==='reset') return run(async()=>{ if(!confirm('Delete demo edits and proposals, and restore the fictional seed?'))return;await api('/demo/reset',{method:'POST'});state.proposal=null;state.manualPlan=null;state.viewMode='requested';clearPlanHistory();await reload();return 'Synthetic fixture restored.'; });
-});
-document.addEventListener('keydown',event=>{
-  if(event.key!=='Enter'&&event.key!==' ')return;
-  const mapTarget=event.target.closest?.('[data-map-sector],[data-map-station]');
-  if(!mapTarget)return;
-  event.preventDefault();
-  selectNetworkMapTarget(mapTarget);
 });
 
 let pointerDrag=null;

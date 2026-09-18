@@ -20,6 +20,7 @@ class Settings(BaseSettings):
     solver_time_limit_seconds: float = 8.0
     database_path: str = str(ROOT / "backend" / "nebulax.sqlite3")
     dataset_path: str = str(ROOT / "data" / "comprehensive_synthetic_data.json")
+    official_data_path: str = str(ROOT / "data")
     supabase_url: str = ""
     supabase_publishable_key: str = ""
     officer_user_ids: str = ""
@@ -34,8 +35,6 @@ class Settings(BaseSettings):
             raise ValueError("Demo identity is NOT authentication. Refusing production + demo mode.")
         if not 0.1 <= self.solver_time_limit_seconds <= 60:
             raise ValueError("Solver time limit must be between 0.1 and 60 seconds")
-        if not Path(self.dataset_path).is_file():
-            raise ValueError(f"Dataset file does not exist: {self.dataset_path}")
         if self.auth_mode == "supabase":
             if not self.supabase_url.startswith("https://"):
                 raise ValueError("Supabase mode requires an HTTPS project URL")

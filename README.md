@@ -76,7 +76,9 @@ Copy-Item .env.example .env
 
 Open **http://127.0.0.1:8000** in your browser. Interactive backend API documentation is at **http://127.0.0.1:8000/docs**.
 
-The database is created and seeded automatically on first startup. You do not need Supabase, an API key, a separate database server, or an LLM account for this local demo. Package installation does require an internet connection.
+Startup creates or safely upgrades one local SQLite database at `DATABASE_PATH` (default `backend/nebulax.sqlite3`) and validates/imports all eight official CSVs from `OFFICIAL_DATA_PATH` (default `data`). Matching bundles are reused; changed bundles create new snapshots without resetting runs or plans. Missing or invalid required CSVs stop startup with an error. Python's built-in `sqlite3` is the only database runtime; no database server or migration command is required. See [persistence and compatibility](docs/DATABASE.md).
+
+Synthetic JSON is not loaded during PS1 startup. The legacy API currently cannot import the deleted `backend.app.models` module, a limitation already present at compatibility baseline `c156c5a`. Startup logs this limitation and serves the separate PS1 API. The legacy workflow below is historical, not a working fresh-start workflow.
 
 Leave the terminal running while you use the app. Press `Ctrl+C` to stop it. After the first setup, run `sh scripts/dev.sh` on macOS/Linux or `./scripts/dev.ps1` in PowerShell.
 

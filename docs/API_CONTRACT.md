@@ -15,6 +15,14 @@
 
 Base path: `/api/ps1`. Supports the official PS1 workflow for unseen eight-file instance evaluation, multi-week solving, official metric reporting, and export generation.
 
+### Implemented persistence endpoints
+
+The current persistence implementation provides upload, instance metadata, queued runs, progress, and stored results. The broader contract below remains the adoption target; this work does not add a solver worker, export endpoint, or official validator.
+
+Upload accepts exactly eight multipart `files` parts with the required official filenames. A new validated bundle returns HTTP 201 with `instance_id`, `revision_id`, `fingerprint`, `validation_status`, `duplicate: false`, and `entity_counts`. An identical bundle, including the startup bundle, returns HTTP 409 with `detail.message`, `detail.instance_id`, `detail.revision_id`, and `detail.fingerprint`. Invalid or incomplete bundles return HTTP 422. Rejected uploads make no database, audit, or stored-file changes. See [SQLite import and compatibility details](DATABASE.md).
+
+`GET /instances/{id}` currently returns instance metadata and revisions. `POST /solve` returns HTTP 202 with the queued run ID, instance/revision IDs, scenario, status, and creation time. Progress and results retain their existing persisted response fields. All routes retain the existing authentication dependency. The legacy router remains unavailable because of the pre-existing deleted `backend.app.models` dependency; its documented contracts below are historical.
+
 ## Official PS1 Endpoints
 
 | Method and Route | Purpose | Payload / Parameters | Response |

@@ -73,7 +73,29 @@ class NetworkMapService:
             horizon_start = params.get("horizon_start", horizon_start)
             horizon_weeks = int(params.get("horizon_weeks", horizon_weeks))
 
-        source_type = "sample_outputs" if any(s.source == "mock" for s in scenarios if s.available) else "solver"
+        weekly_summary = []
+        for week in range(1, horizon_weeks + 1):
+            active_ids = {
+                row.activity_id
+                for row in self.schedule_source.get_accesses("A", week=week)
+            }
+            active_ids.update(
+                row.activity_id
+                for row in self.schedule_source.get_occupancies("A", week=week)
+            )
+            weekly_summary.append({
+                "week": week,
+                "activeCount": len(active_ids),
+                "hasActivity": bool(active_ids),
+            })
+
+        available_sources = {s.source for s in scenarios if s.available}
+        if "mock" in available_sources:
+            source_type = "sample_outputs"
+        elif "solved" in available_sources:
+            source_type = "solved_outputs"
+        else:
+            source_type = "solver"
         return {
             "revision": {
                 "id": revision_id,
@@ -132,7 +154,6 @@ class NetworkMapService:
                     "bound": r.bound.value,
                     "supply_capacity": r.supply_capacity,
                 }
-                for r in problem.locations
                 for r in problem.locations
             ],
         }

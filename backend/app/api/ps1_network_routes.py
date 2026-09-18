@@ -13,7 +13,7 @@ def _get_service(request: Request) -> NetworkMapService:
     if not hasattr(request.app.state, "network_map_service"):
         db = getattr(request.app.state, "db", getattr(request.app.state, "ps1_db", None))
         request.app.state.network_map_service = NetworkMapService(
-            db=db,
+            database=db,
             settings=getattr(request.app.state, "settings", None),
         )
     return request.app.state.network_map_service

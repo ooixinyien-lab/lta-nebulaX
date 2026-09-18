@@ -1,369 +1,521 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
+import { 
+  Calendar, Shield, Zap, Layers, Filter, 
+  ChevronLeft, ChevronRight, X, AlertTriangle, RefreshCw
+} from 'lucide-react';
 
-// Priority Color Mapping for Matrix
-const PRIORITY_COLORS = {
-  1: 'bg-rose-950/80 border-rose-600/80 text-rose-300 hover:bg-rose-900',
-  2: 'bg-amber-950/80 border-amber-600/80 text-amber-300 hover:bg-amber-900',
-  3: 'bg-slate-900 border-slate-700 text-slate-300 hover:bg-slate-800',
+// Access Type Semantic Styling
+const ACCESS_TYPE_STYLES = {
+  PC: {
+    bg: 'bg-purple-950/80 hover:bg-purple-900',
+    border: 'border-purple-600/80',
+    text: 'text-purple-200',
+    badge: 'bg-purple-900/90 text-purple-300 border-purple-500/50',
+    label: 'Possession with Consist'
+  },
+  C: {
+    bg: 'bg-emerald-950/80 hover:bg-emerald-900',
+    border: 'border-emerald-600/80',
+    text: 'text-emerald-200',
+    badge: 'bg-emerald-900/90 text-emerald-300 border-emerald-500/50',
+    label: 'Consist Tenant'
+  },
+  PM: {
+    bg: 'bg-blue-950/80 hover:bg-blue-900',
+    border: 'border-blue-600/80',
+    text: 'text-blue-200',
+    badge: 'bg-blue-900/90 text-blue-300 border-blue-500/50',
+    label: 'Plant Solo'
+  }
 };
+
+const NIGHTS_OF_WEEK = [
+  { id: 1, label: 'Mon', time: '01:30', isEclo: false },
+  { id: 2, label: 'Tue', time: '01:30', isEclo: false },
+  { id: 3, label: 'Wed', time: '01:30', isEclo: false },
+  { id: 4, label: 'Thu', time: '01:30', isEclo: false },
+  { id: 5, label: 'Fri', time: '00:30', isEclo: true },
+  { id: 6, label: 'Sat', time: '00:30', isEclo: true },
+  { id: 7, label: 'Sun', time: '01:30', isEclo: false },
+];
 
 export default function ScheduleDashboard({
   displayData = {},
-  topologyData = null,
   scenario = 'A',
   onScenarioChange = () => {},
 }) {
-  const [selectedItem, setSelectedItem] = useState(null);
-  const [report, setReport] = useState(null);
-  const [isLoadingPenalties, setIsLoadingPenalties] = useState(false);
-  const canvasRef = useRef(null);
+  // Navigation & Filter State
+  const [activeWeek, setActiveWeek] = useState(1);
+  const [activeView, setActiveView] = useState('matrix'); // 'matrix' | 'gantt'
+  const [lineFilter, setLineFilter] = useState('ALL');
+  const [boundFilter, setBoundFilter] = useState('BOTH');
+  const [showBuffers, setShowBuffers] = useState(true);
+  const [selectedActivity, setSelectedActivity] = useState(null);
 
-  const weeks = Array.from({ length: 30 }, (_, i) => i + 1);
-  const mockLocations = displayData.sample_sectors?.map((s) => ({
-    id: s.sector_id,
-  })) || [{ id: 'SEC:ALP:S01_S02' }, { id: 'SEC:ALP:S02_S03' }, { id: 'PLAT:ALP:STN_A3' }];
-
-  // 1. Fetch Penalty Scoreboard Data
+  // Auto-adjust active week based on dataset range
   useEffect(() => {
-    setIsLoadingPenalties(true);
-    fetch(`/api/ps1/evaluate-penalties?scenario=${scenario}`)
-      .then((res) => (res.ok ? res.json() : null))
-      .then((data) => {
-        if (data) setReport(data);
-      })
-      .catch((err) => console.error('Failed to load penalty report:', err))
-      .finally(() => setIsLoadingPenalties(false));
-  }, [scenario]);
+    if (displayData.sample_activities?.length > 0) {
+      const minW = Math.min(...displayData.sample_activities.map((a) => a.planned_start_week || 1));
+      setActiveWeek(minW);
+    }
+  }, [displayData]);
 
-  // 2. High-DPI Canvas Rendering (Seq-Ordered & Dynamic Legend)
-  useEffect(() => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
+  // 1. Process Real CSV Fields into Matrix Structure
+  const { filteredLocations, weekActivities, weekKpis, groupedContracts } = useMemo(() => {
+    const rawActivities = displayData.sample_activities || [];
+    const rawSectors = displayData.sample_sectors || [];
 
-    const ctx = canvas.getContext('2d');
-    const lines = topologyData?.lines || displayData.sample_lines || [];
-    if (!lines.length) return;
-
-    // --- A. Sharp Crisp Rendering for High-DPI / Retina Displays ---
-    const dpr = window.devicePixelRatio || 1;
-    const rect = canvas.getBoundingClientRect();
-    
-    // Set logical canvas dimensions matching display size
-    canvas.width = rect.width * dpr;
-    canvas.height = rect.height * dpr;
-    ctx.scale(dpr, dpr);
-
-    // Clear previous drawing
-    ctx.clearRect(0, 0, rect.width, rect.height);
-
-    // --- B. Assign Distinct Line Colors ---
-    const lineColors = {};
-    const defaultHues = [200, 15, 140, 280, 45]; // Cyan, Crimson, Emerald, Purple, Amber
-    lines.forEach((line, idx) => {
-      const hue = defaultHues[idx % defaultHues.length];
-      lineColors[line.line_code] = `hsl(${hue}, 85%, 55%)`;
+    // Derive Unique Locations from SCHEDULE_OCCUPANCY location_id
+    const locationSet = new Set();
+    rawActivities.forEach((a) => {
+      if (a.start_location) locationSet.add(a.start_location);
+    });
+    rawSectors.forEach((s) => {
+      if (s.sector_id) locationSet.add(s.sector_id);
     });
 
-    // --- C. Sort & Node Positions Based on 02_STATIONS.csv Sequence ---
-    const stationNodes = {};
-
-    lines.forEach((line, lineIdx) => {
-      // Sort stations strictly by sequence order
-      const rawStations = line.stations || displayData.sample_stations || [];
-      const sortedStations = [...rawStations].sort((a, b) => (a.seq ?? 0) - (b.seq ?? 0));
-
-      sortedStations.forEach((stn, seqIdx) => {
-        const sid = stn.station_id || `STN_${seqIdx}`;
-        const yPos = 65 + lineIdx * 65;
-        const xPos = 80 + seqIdx * 115;
-
-        if (!stationNodes[sid]) {
-          stationNodes[sid] = {
-            id: sid,
-            codes: [sid],
-            lines: [line.line_code || 'ALP'],
-            is_interchange: stn.is_interchange === 1,
-            x: xPos,
-            y: yPos,
-          };
-        } else {
-          if (!stationNodes[sid].lines.includes(line.line_code)) {
-            stationNodes[sid].lines.push(line.line_code);
-          }
-          stationNodes[sid].is_interchange = true;
-        }
-      });
+    // Parse and Filter Location Items
+    const locs = Array.from(locationSet).map((locId) => {
+      const parts = String(locId).split(':');
+      return {
+        sector_id: locId,
+        line_code: parts[1] || 'BET',
+        is_station: locId.startsWith('PLAT'),
+        is_interchange: locId.includes('H01') || locId.includes('H02') || locId.includes('S15'),
+        bound: locId.endsWith('EB') ? 'EB' : locId.endsWith('WB') ? 'WB' : 'BOTH',
+      };
+    }).filter((loc) => {
+      if (lineFilter !== 'ALL' && loc.line_code !== lineFilter) return false;
+      if (boundFilter !== 'BOTH' && loc.bound !== 'BOTH' && loc.bound !== boundFilter) return false;
+      return true;
     });
 
-    const nodesList = Object.values(stationNodes);
+    // Activities for active planning week
+    const currentWeekActs = rawActivities.filter((a) => a.planned_start_week === activeWeek);
 
-    // --- D. Draw Sector Tracks Connected in Sequence Order ---
-    lines.forEach((line) => {
-      const rawSectors = line.sectors || displayData.sample_sectors || [];
-      const sortedSectors = [...rawSectors].sort((a, b) => (a.seq ?? 0) - (b.seq ?? 0));
+    // Compute KPIs
+    const ecloCount = currentWeekActs.filter((a) => a.eclo === 1).length;
+    const totalSlots = currentWeekActs.length;
 
-      sortedSectors.forEach((sec) => {
-        const start = nodesList.find((n) => n.id === (sec.from_station || sec.from_station_id));
-        const end = nodesList.find((n) => n.id === (sec.to_station || sec.to_station_id));
-
-        if (start && end) {
-          ctx.beginPath();
-          ctx.moveTo(start.x, start.y);
-          ctx.lineTo(end.x, end.y);
-          ctx.strokeStyle = lineColors[line.line_code] || '#38bdf8';
-          ctx.lineWidth = 4;
-          ctx.lineCap = 'round';
-          ctx.stroke();
-        }
-      });
+    // Group Contracts for View C Gantt
+    const contractsMap = {};
+    rawActivities.forEach((act) => {
+      const cNum = act.contract_number || 'C001';
+      if (!contractsMap[cNum]) contractsMap[cNum] = [];
+      contractsMap[cNum].push(act);
     });
 
-    // --- E. Draw Station Nodes ---
-    nodesList.forEach((node) => {
-      const radius = node.is_interchange ? 10 : 7;
-
-      if (node.is_interchange && node.lines.length >= 2) {
-        // Left half-circle
-        ctx.beginPath();
-        ctx.arc(node.x, node.y, radius, Math.PI * 0.5, Math.PI * 1.5);
-        ctx.fillStyle = lineColors[node.lines[0]] || '#ef4444';
-        ctx.fill();
-
-        // Right half-circle
-        ctx.beginPath();
-        ctx.arc(node.x, node.y, radius, Math.PI * 1.5, Math.PI * 0.5);
-        ctx.fillStyle = lineColors[node.lines[1]] || '#3b82f6';
-        ctx.fill();
-
-        // Border ring
-        ctx.beginPath();
-        ctx.arc(node.x, node.y, radius, 0, Math.PI * 2);
-        ctx.lineWidth = 2;
-        ctx.strokeStyle = '#ffffff';
-        ctx.stroke();
-      } else {
-        // Single station
-        ctx.beginPath();
-        ctx.arc(node.x, node.y, radius, 0, Math.PI * 2);
-        ctx.fillStyle = lineColors[node.lines[0]] || '#10b981';
-        ctx.fill();
-        ctx.lineWidth = 2;
-        ctx.strokeStyle = '#ffffff';
-        ctx.stroke();
-      }
-
-      // Station ID labels
-      ctx.font = 'bold 9px monospace';
-      ctx.fillStyle = '#f8fafc';
-      ctx.textAlign = 'center';
-      ctx.fillText(node.codes.join('/'), node.x, node.y + radius + 12);
-    });
-
-    // --- F. Draw Line Color Legend in Top-Right Corner ---
-    const legendX = rect.width - 150;
-    let legendY = 20;
-
-    ctx.font = 'bold 10px monospace';
-    ctx.textAlign = 'left';
-
-    lines.forEach((line) => {
-      const color = lineColors[line.line_code] || '#38bdf8';
-      const label = `${line.line_code} Line (${line.line_name || 'Line'})`;
-
-      // Legend Color Swatch Box
-      ctx.fillStyle = color;
-      ctx.fillRect(legendX, legendY - 8, 12, 12);
-      ctx.strokeStyle = '#ffffff';
-      ctx.lineWidth = 1;
-      ctx.strokeRect(legendX, legendY - 8, 12, 12);
-
-      // Legend Text Label
-      ctx.fillStyle = '#cbd5e1';
-      ctx.fillText(label, legendX + 18, legendY);
-
-      legendY += 18;
-    });
-
-  }, [topologyData, displayData]);
-
-  const summary = report?.summary || {
-    total_score: 48.3,
-    delay_penalty_P: 48.3,
-    location_excess_slots_V: 0,
-    total_eclo_accesses_E: 0,
-    hard_violations_count: 0,
-  };
+    return {
+      filteredLocations: locs,
+      weekActivities: currentWeekActs,
+      weekKpis: { totalSlots, ecloCount },
+      groupedContracts: contractsMap,
+    };
+  }, [displayData, activeWeek, lineFilter, boundFilter]);
 
   return (
-    <div className="p-6 space-y-6 h-full overflow-auto bg-slate-900 text-slate-100">
-      {/* 1. EXECUTION & KPI SCOREBOARD BAR */}
-      <div className="bg-slate-950 border border-slate-800 rounded-xl p-4 shadow-xl flex flex-wrap items-center justify-between gap-4">
-        <div>
-          <h2 className="text-sm font-bold text-cyan-400 uppercase tracking-wider">
-            30-Week Master Schedule Engine
-          </h2>
-          <p className="text-xs text-slate-400">PS1 Constraint & Penalty Score Dashboard</p>
+    <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col font-sans select-none">
+      
+      {/* ========================================================================= */}
+      {/* HEADER BAR */}
+      {/* ========================================================================= */}
+      <header className="border-b border-slate-800 bg-slate-950 px-6 py-3 flex flex-wrap items-center justify-between gap-4 sticky top-0 z-40 shadow-2xl">
+        <div className="flex items-center gap-4">
+          <div className="bg-cyan-500 text-slate-950 font-black px-2.5 py-1 rounded text-lg tracking-wider shadow-lg shadow-cyan-500/20">
+            NEBULA X
+          </div>
+          <div>
+            <h1 className="text-base font-bold text-slate-100 tracking-tight flex items-center gap-2">
+              Weekly Possession Dispatch Board
+              <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-slate-900 border border-slate-800 text-cyan-400">
+                LIVE CSV DATA
+              </span>
+            </h1>
+            <p className="text-xs text-slate-400 font-mono">
+              SCHEDULE_ACCESS • SCHEDULE_OCCUPANCY • RESULTS
+            </p>
+          </div>
         </div>
 
-        {/* Scenario Toggle */}
-        <div className="flex items-center bg-slate-900 border border-slate-800 rounded-lg p-1">
-          {['A', 'B', 'C'].map((sc) => (
+        {/* Planning Horizon Scrubber */}
+        <div className="flex items-center bg-slate-900 border border-slate-800 rounded-xl p-1 shadow-inner">
+          <button
+            onClick={() => setActiveWeek((w) => Math.max(1, w - 1))}
+            disabled={activeWeek === 1}
+            className="p-1.5 rounded-lg hover:bg-slate-800 disabled:opacity-30 text-slate-300 transition"
+          >
+            <ChevronLeft size={18} />
+          </button>
+
+          <div className="px-4 text-center font-mono">
+            <span className="text-xs text-slate-400 block font-sans uppercase text-[9px] tracking-widest">
+              Planning Horizon
+            </span>
+            <span className="text-sm font-bold text-cyan-400">
+              Week {activeWeek} of 30
+            </span>
+          </div>
+
+          <button
+            onClick={() => setActiveWeek((w) => Math.min(30, w + 1))}
+            disabled={activeWeek === 30}
+            className="p-1.5 rounded-lg hover:bg-slate-800 disabled:opacity-30 text-slate-300 transition"
+          >
+            <ChevronRight size={18} />
+          </button>
+        </div>
+
+        {/* View Controls & Scenario Toggle */}
+        <div className="flex items-center gap-3">
+          <div className="flex items-center bg-slate-900 border border-slate-800 rounded-lg p-1">
+            {['A', 'B', 'C'].map((sc) => (
+              <button
+                key={sc}
+                onClick={() => onScenarioChange(sc)}
+                className={`px-2.5 py-1 text-xs font-bold font-mono rounded transition ${
+                  scenario === sc
+                    ? 'bg-cyan-600 text-white shadow'
+                    : 'text-slate-400 hover:text-slate-200'
+                }`}
+              >
+                Scen {sc}
+              </button>
+            ))}
+          </div>
+
+          <div className="bg-slate-900 border border-slate-800 p-1 rounded-lg flex font-mono text-xs">
             <button
-              key={sc}
-              onClick={() => onScenarioChange(sc)}
-              className={`px-3 py-1 rounded text-xs font-bold font-mono transition ${
-                scenario === sc
-                  ? 'bg-cyan-600 text-white shadow'
+              onClick={() => setActiveView('matrix')}
+              className={`px-3 py-1.5 rounded-md font-bold transition flex items-center gap-2 ${
+                activeView === 'matrix'
+                  ? 'bg-cyan-600 text-white shadow-md shadow-cyan-600/30'
                   : 'text-slate-400 hover:text-slate-200'
               }`}
             >
-              Scenario {sc}
+              <Calendar size={14} /> View A: 7-Day Matrix
             </button>
-          ))}
+            <button
+              onClick={() => setActiveView('gantt')}
+              className={`px-3 py-1.5 rounded-md font-bold transition flex items-center gap-2 ${
+                activeView === 'gantt'
+                  ? 'bg-cyan-600 text-white shadow-md shadow-cyan-600/30'
+                  : 'text-slate-400 hover:text-slate-200'
+              }`}
+            >
+              <Layers size={14} /> View C: Contract Gantt
+            </button>
+          </div>
+        </div>
+      </header>
+
+      {/* ========================================================================= */}
+      {/* FILTER & KPI STRIP */}
+      {/* ========================================================================= */}
+      <div className="border-b border-slate-800 bg-slate-900/60 px-6 py-2.5 flex flex-wrap items-center justify-between gap-4 text-xs font-mono">
+        <div className="flex flex-wrap items-center gap-4">
+          <div className="flex items-center gap-2 bg-slate-950 px-3 py-1.5 rounded-lg border border-slate-800">
+            <Filter size={13} className="text-cyan-400" />
+            <span className="text-slate-400">Line:</span>
+            <select
+              value={lineFilter}
+              onChange={(e) => setLineFilter(e.target.value)}
+              className="bg-transparent text-slate-200 font-bold focus:outline-none cursor-pointer"
+            >
+              <option value="ALL">All Lines</option>
+              <option value="ALP">ALP Line</option>
+              <option value="BET">BET Line</option>
+            </select>
+          </div>
+
+          <div className="flex items-center gap-2 bg-slate-950 px-3 py-1.5 rounded-lg border border-slate-800">
+            <span className="text-slate-400">Bound:</span>
+            <select
+              value={boundFilter}
+              onChange={(e) => setBoundFilter(e.target.value)}
+              className="bg-transparent text-slate-200 font-bold focus:outline-none cursor-pointer"
+            >
+              <option value="BOTH">Both Bounds (EB + WB)</option>
+              <option value="EB">Eastbound (EB)</option>
+              <option value="WB">Westbound (WB)</option>
+            </select>
+          </div>
+
+          <label className="flex items-center gap-1.5 cursor-pointer text-slate-300 hover:text-amber-300">
+            <input
+              type="checkbox"
+              checked={showBuffers}
+              onChange={(e) => setShowBuffers(e.target.checked)}
+              className="accent-amber-500 rounded cursor-pointer"
+            />
+            Show Safety Buffers
+          </label>
         </div>
 
-        {/* Penalty KPI Cards */}
-        <div className="flex items-center gap-4 text-xs font-mono">
-          <div className="bg-slate-900 px-3 py-1.5 rounded-lg border border-slate-800">
-            <span className="text-slate-500 block text-[10px]">TOTAL PENALTY</span>
-            <span className="text-sm font-extrabold text-amber-400">
-              {isLoadingPenalties ? '...' : summary.total_score}
-            </span>
+        {/* Capacity KPIs */}
+        <div className="flex items-center gap-6">
+          <div className="bg-slate-950 px-3 py-1 rounded-lg border border-slate-800 flex items-center gap-3">
+            <div>
+              <span className="text-slate-500 text-[9px] block">WEEK {activeWeek} POSSESSIONS</span>
+              <span className="text-cyan-400 font-bold">{weekKpis.totalSlots} night-slots</span>
+            </div>
+            <div className="border-l border-slate-800 pl-3">
+              <span className="text-slate-500 text-[9px] block">ECLO ACCELERATED</span>
+              <span className="text-amber-400 font-bold flex items-center gap-1">
+                <Zap size={11} fill="currentColor" /> {weekKpis.ecloCount} (⚡ 1.5x)
+              </span>
+            </div>
           </div>
-          <div className="bg-slate-900 px-3 py-1.5 rounded-lg border border-slate-800">
-            <span className="text-slate-500 block text-[10px]">DELAY (P)</span>
-            <span className="text-rose-400 font-bold">{summary.delay_penalty_P}</span>
-          </div>
-          <div className="bg-slate-900 px-3 py-1.5 rounded-lg border border-slate-800">
-            <span className="text-slate-500 block text-[10px]">EXCESS (V)</span>
-            <span className="text-amber-400 font-bold">{summary.location_excess_slots_V} slots</span>
-          </div>
-          <div className="bg-slate-900 px-3 py-1.5 rounded-lg border border-slate-800">
-            <span className="text-slate-500 block text-[10px]">ECLO (E)</span>
-            <span className="text-sky-400 font-bold">{summary.total_eclo_accesses_E}</span>
-          </div>
-          {summary.hard_violations_count > 0 && (
-            <div className="bg-rose-950 border border-rose-600 text-rose-300 px-3 py-1.5 rounded-lg font-bold text-[11px] animate-pulse">
-              ⚠ {summary.hard_violations_count} Violations
+        </div>
+      </div>
+
+      {/* ========================================================================= */}
+      {/* MAIN CONTENT AREA */}
+      {/* ========================================================================= */}
+      <main className="flex-1 overflow-hidden relative flex">
+        
+        {/* SCHEDULE MATRIX VIEW */}
+        <div className="flex-1 overflow-auto p-6 space-y-6">
+          {activeView === 'matrix' && (
+            <div className="bg-slate-950 border border-slate-800 rounded-2xl overflow-hidden shadow-2xl">
+              <div className="overflow-x-auto">
+                <table className="w-full text-left border-collapse min-w-[1000px]">
+                  <thead>
+                    <tr className="border-b border-slate-800 bg-slate-900/90 font-mono text-xs">
+                      <th className="p-3 sticky left-0 bg-slate-900 border-r border-slate-800 w-64 z-20 font-bold text-slate-300 uppercase tracking-wider">
+                        Track Location / Sector ID
+                      </th>
+
+                      {/* 7 Calendar Nights Columns (N1-N7) */}
+                      {NIGHTS_OF_WEEK.map((night) => (
+                        <th
+                          key={night.id}
+                          className={`p-2.5 text-center border-r border-slate-800/80 min-w-[120px] ${
+                            night.isEclo ? 'bg-amber-950/20 text-amber-300' : 'text-slate-300'
+                          }`}
+                        >
+                          <div className="font-bold flex items-center justify-center gap-1">
+                            {night.label} Night (N{night.id})
+                            {night.isEclo && <Zap size={12} className="text-amber-400 fill-amber-400" />}
+                          </div>
+                          <div className="text-[10px] text-slate-500 font-normal">
+                            Access @ {night.time} HRS
+                          </div>
+                        </th>
+                      ))}
+                    </tr>
+                  </thead>
+
+                  <tbody className="divide-y divide-slate-800/60 text-xs font-mono">
+                    {filteredLocations.map((loc) => (
+                      <tr key={loc.sector_id} className="hover:bg-slate-900/30 transition">
+                        
+                        {/* Sticky Sector ID Column */}
+                        <td className="p-3 sticky left-0 bg-slate-950 border-r border-slate-800 font-bold text-slate-200 z-10 flex items-center justify-between gap-2">
+                          <span className="truncate">{loc.sector_id}</span>
+                          <div className="flex items-center gap-1 text-[9px]">
+                            {loc.is_station && (
+                              <span className="px-1.5 py-0.5 rounded bg-cyan-950 border border-cyan-700 text-cyan-300 font-bold">
+                                STN
+                              </span>
+                            )}
+                            {loc.is_interchange && (
+                              <span className="px-1.5 py-0.5 rounded bg-rose-950 border border-rose-700 text-rose-300 font-bold">
+                                INT
+                              </span>
+                            )}
+                          </div>
+                        </td>
+
+                        {/* 7 Night Cells */}
+                        {NIGHTS_OF_WEEK.map((night) => {
+                          const matchingActs = weekActivities.filter(
+                            (a) => a.start_location === loc.sector_id && a.access_night === night.id
+                          );
+
+                          // Group by co_share_group from SCHEDULE_OCCUPANCY.csv
+                          const coShareGroups = {};
+                          matchingActs.forEach((act) => {
+                            const grp = act.co_share_group || 'SOLO';
+                            if (!coShareGroups[grp]) coShareGroups[grp] = [];
+                            coShareGroups[grp].push(act);
+                          });
+
+                          return (
+                            <td
+                              key={night.id}
+                              className={`p-1.5 border-r border-slate-800/50 align-top relative ${
+                                night.isEclo ? 'bg-amber-950/10' : ''
+                              }`}
+                            >
+                              {Object.entries(coShareGroups).map(([groupTag, acts], grpIdx) => (
+                                <div
+                                  key={grpIdx}
+                                  className={`rounded-lg p-1 space-y-1 shadow-lg border my-0.5 ${
+                                    groupTag !== 'SOLO'
+                                      ? 'bg-slate-900/90 border-cyan-700/80'
+                                      : 'bg-transparent border-transparent'
+                                  }`}
+                                >
+                                  {groupTag !== 'SOLO' && (
+                                    <div className="text-[9px] font-bold text-cyan-400 px-1 border-b border-slate-800 pb-0.5 flex justify-between">
+                                      <span>GROUP #{groupTag}</span>
+                                      <span>1 SLOT</span>
+                                    </div>
+                                  )}
+
+                                  {acts.map((act) => {
+                                    const accessType = act.access_type || 'PC';
+                                    const style = ACCESS_TYPE_STYLES[accessType] || ACCESS_TYPE_STYLES.PC;
+                                    const isSelected = selectedActivity?.activity_id === act.activity_id;
+
+                                    return (
+                                      <button
+                                        key={act.activity_id}
+                                        onClick={() => setSelectedActivity(act)}
+                                        className={`w-full text-left p-1.5 rounded-md border transition transform hover:scale-[1.02] ${style.bg} ${style.border} ${style.text} ${
+                                          isSelected ? 'ring-2 ring-cyan-400 shadow-xl' : ''
+                                        }`}
+                                      >
+                                        <div className="flex items-center justify-between">
+                                          <span className="font-extrabold text-xs">{act.activity_id}</span>
+                                          <span className="text-[9px] text-slate-400 font-mono">
+                                            Seq #{act.access_seq || 1}
+                                          </span>
+                                        </div>
+
+                                        <div className="text-[10px] text-slate-300 opacity-90 truncate mt-0.5">
+                                          Contract: {act.contract_number || 'C001'}
+                                        </div>
+
+                                        {act.eclo === 1 && (
+                                          <div className="mt-1 flex items-center gap-1 text-[9px] font-bold text-amber-300 bg-amber-950/80 border border-amber-600/60 rounded px-1 py-0.2">
+                                            <Zap size={9} fill="currentColor" /> ECLO (1.5x Yield)
+                                          </div>
+                                        )}
+                                      </button>
+                                    );
+                                  })}
+                                </div>
+                              ))}
+                            </td>
+                          );
+                        })}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+
+          {/* VIEW C: CONTRACT GANTT & RESULTS */}
+          {activeView === 'gantt' && (
+            <div className="bg-slate-950 border border-slate-800 rounded-2xl p-6 shadow-2xl space-y-6 font-mono">
+              <h3 className="text-sm font-bold text-cyan-400 uppercase tracking-wider">
+                Simulated Completion Dates & Delay Overruns (RESULTS.csv)
+              </h3>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                {Object.entries(groupedContracts).map(([contractNum, acts]) => {
+                  const res = (displayData.results || []).find((r) => r.contract_number === contractNum) || {};
+                  const isOverrun = res.overrun_days > 0;
+
+                  return (
+                    <div
+                      key={contractNum}
+                      className={`bg-slate-900 border rounded-xl p-4 space-y-3 ${
+                        isOverrun ? 'border-rose-600/80' : 'border-slate-800'
+                      }`}
+                    >
+                      <div className="flex justify-between items-center border-b border-slate-800 pb-2">
+                        <span className="text-sm font-bold text-slate-100">{contractNum}</span>
+                        {isOverrun ? (
+                          <span className="px-2 py-0.5 rounded bg-rose-950 border border-rose-600 text-rose-300 text-[10px] font-bold flex items-center gap-1">
+                            <AlertTriangle size={11} /> +{res.overrun_days} Days Delay
+                          </span>
+                        ) : (
+                          <span className="px-2 py-0.5 rounded bg-emerald-950 border border-emerald-600 text-emerald-300 text-[10px] font-bold">
+                            On Schedule
+                          </span>
+                        )}
+                      </div>
+
+                      <div className="text-xs space-y-1 text-slate-400">
+                        <div>Simulated Completion: <strong className="text-slate-200">{res.simulated_completion_date || 'N/A'}</strong></div>
+                        <div>Total Activities Enrolled: <strong className="text-cyan-400">{acts.length}</strong></div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
             </div>
           )}
         </div>
-      </div>
 
-      {/* 2. TOPOLOGY NETWORK DIAGRAM CANVAS */}
-      <div className="bg-slate-950 border border-slate-800 rounded-xl p-4 shadow-xl">
-        <h4 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">
-          Railway Network Topology Map
-        </h4>
-        <canvas
-          ref={canvasRef}
-          style={{ width: '100%', height: '220px' }}
-          className="bg-slate-900 rounded-lg border border-slate-800"
-        />
-      </div>
+        {/* POSSESSION INSPECTOR DRAWER */}
+        {selectedActivity && (
+          <div className="w-96 bg-slate-950 border-l border-slate-800 p-6 shadow-2xl overflow-y-auto z-30 flex flex-col justify-between font-mono">
+            <div className="space-y-6">
+              
+              <div className="flex items-center justify-between border-b border-slate-800 pb-4">
+                <div>
+                  <h3 className="text-base font-bold text-cyan-400">{selectedActivity.activity_id}</h3>
+                  <span className="text-xs text-slate-400">CSV Possession Inspector</span>
+                </div>
+                <button
+                  onClick={() => setSelectedActivity(null)}
+                  className="text-slate-400 hover:text-white p-1 rounded-md"
+                >
+                  <X size={18} />
+                </button>
+              </div>
 
-      {/* 3. LOCATION-TIME SCHEDULE MATRIX */}
-      <div className="bg-slate-950 border border-slate-800 rounded-xl overflow-hidden shadow-2xl">
-        <div className="overflow-x-auto">
-          <table className="w-full text-left border-collapse min-w-[1200px]">
-            <thead>
-              <tr className="border-b border-slate-800 bg-slate-900/80 text-[10px] uppercase tracking-wider text-slate-400">
-                <th className="p-3 sticky left-0 bg-slate-900 border-r border-slate-800 w-48 z-10">
-                  Location / Sector ID
-                </th>
-                {weeks.map((w) => (
-                  <th key={w} className="p-2 text-center border-r border-slate-800/50 w-12 font-mono">
-                    W{w}
-                  </th>
-                ))}
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-800/50 text-xs font-mono">
-              {mockLocations.map((loc) => (
-                <tr key={loc.id} className="hover:bg-slate-900/30">
-                  <td className="p-3 sticky left-0 bg-slate-950 border-r border-slate-800 font-medium text-slate-300">
-                    {loc.id}
-                  </td>
-                  {weeks.map((w) => {
-                    const acts = (displayData.sample_activities || []).filter(
-                      (a) => a.planned_start_week === w && a.start_location === loc.id
-                    );
+              {/* Data Card */}
+              <div className="bg-slate-900 p-4 rounded-xl border border-slate-800 space-y-2">
+                <div className="text-slate-500 text-[10px]">CONTRACT NUMBER</div>
+                <div className="text-sm font-bold text-slate-200">{selectedActivity.contract_number || 'C001'}</div>
 
-                    return (
-                      <td key={w} className="p-1 border-r border-slate-800/40 text-center">
-                        {acts.map((matchingAct) => {
-                          const priStyle =
-                            PRIORITY_COLORS[matchingAct.activity_priority] || PRIORITY_COLORS[3];
-                          const isEclo = matchingAct.eclo === 1;
+                <div className="border-t border-slate-800 pt-2 text-slate-500 text-[10px]">LOCATION ID</div>
+                <div className="text-xs font-bold text-cyan-300">{selectedActivity.start_location}</div>
+              </div>
 
-                          return (
-                            <button
-                              key={matchingAct.activity_id}
-                              onClick={() => setSelectedItem(matchingAct)}
-                              className={`w-full py-1 px-1 rounded text-[10px] font-bold transition transform hover:scale-105 border my-0.5 ${priStyle}`}
-                            >
-                              {matchingAct.activity_id}
-                              {isEclo && <span className="ml-1 text-sky-300">⚡</span>}
-                            </button>
-                          );
-                        })}
-                      </td>
-                    );
-                  })}
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </div>
-
-      {/* 4. SLIDE-OVER JOB INSPECTOR DRAWER */}
-      {selectedItem && (
-        <div className="fixed inset-y-0 right-0 w-96 bg-slate-950 border-l border-slate-800 p-6 shadow-2xl z-50 overflow-y-auto space-y-6">
-          <div className="flex items-center justify-between border-b border-slate-800 pb-4">
-            <div>
-              <h3 className="text-base font-bold text-cyan-400 font-mono">
-                {selectedItem.activity_id}
-              </h3>
-              <p className="text-xs text-slate-400">
-                Contract: {selectedItem.contract_number || 'C001'}
-              </p>
+              <div className="bg-slate-900 p-4 rounded-xl border border-slate-800 space-y-3 text-xs">
+                <div className="flex justify-between">
+                  <span className="text-slate-400">Access Sequence:</span>
+                  <span className="text-slate-200 font-bold">Seq #{selectedActivity.access_seq || 1}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-slate-400">Night Scheduled:</span>
+                  <span className="text-slate-200 font-bold">Night N{selectedActivity.access_night}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-slate-400">Co-Share Group:</span>
+                  <span className="text-cyan-400 font-bold">{selectedActivity.co_share_group || 'SOLO'}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-slate-400">ECLO Status:</span>
+                  <span className={selectedActivity.eclo ? 'text-amber-400 font-bold' : 'text-slate-500'}>
+                    {selectedActivity.eclo ? 'Granted (1.5x Yield)' : 'Standard'}
+                  </span>
+                </div>
+              </div>
             </div>
+
             <button
-              onClick={() => setSelectedItem(null)}
-              className="text-slate-400 hover:text-white font-bold p-1 rounded"
+              onClick={() => setSelectedActivity(null)}
+              className="mt-6 w-full bg-slate-900 hover:bg-slate-800 border border-slate-700 text-slate-200 text-xs font-bold py-2.5 rounded-xl transition"
             >
-              ✕
+              Close Inspector
             </button>
           </div>
+        )}
+      </main>
 
-          <div className="space-y-4 text-xs font-mono">
-            <div className="bg-slate-900 p-3 rounded-lg border border-slate-800 space-y-1">
-              <div className="text-slate-400">Planned Start: Week {selectedItem.planned_start_week}</div>
-              <div className="text-slate-400">Workload: {selectedItem.total_accesses || 7} Accesses</div>
-              <div className="text-amber-400">Priority: Tier {selectedItem.activity_priority || 1}</div>
-            </div>
-
-            <div className="bg-slate-900 p-3 rounded-lg border border-slate-800 space-y-2">
-              <h5 className="font-bold text-slate-300 uppercase tracking-wider text-[10px]">
-                Constraint & Execution Audit
-              </h5>
-              <div className="flex justify-between">
-                <span className="text-slate-400">ECLO Accelerated:</span>
-                <span className={selectedItem.eclo ? 'text-sky-400 font-bold' : 'text-slate-500'}>
-                  {selectedItem.eclo ? 'Yes (+0.5 Yield)' : 'No'}
-                </span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-slate-400">Predecessor:</span>
-                <span className="text-slate-200">
-                  {selectedItem.predecessor_activity_id || 'None'}
-                </span>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
+      {/* FOOTER BAR */}
+      <footer className="border-t border-slate-800 bg-slate-950 px-6 py-2 text-[11px] font-mono text-slate-500 flex justify-between items-center">
+        <span>NEBULA X • Possession Dispatch Engine</span>
+        <span>Mapped CSV Schema: <strong className="text-slate-300">SCHEDULE_ACCESS + SCHEDULE_OCCUPANCY</strong></span>
+      </footer>
     </div>
   );
 }

@@ -77,6 +77,17 @@ class NetworkMapService:
                         horizon_weeks = int(p.value)
 
         source_type = "sample_outputs" if any(s.source == "mock" for s in scenarios if s.available) else "solver"
+
+        weekly_summary = []
+        for w in range(1, horizon_weeks + 1):
+            accesses = self.schedule_source.get_accesses("A", week=w)
+            act_ids = sorted(set(a.activity_id for a in accesses))
+            weekly_summary.append({
+                "week": w,
+                "activeCount": len(act_ids),
+                "hasActivity": len(act_ids) > 0,
+            })
+
         return {
             "revision": {
                 "id": revision_id,
@@ -87,6 +98,7 @@ class NetworkMapService:
                 "weeks": horizon_weeks,
             },
             "scheduleSource": source_type,
+            "weeklySummary": weekly_summary,
             "scenarios": [
                 {
                     "scenario": s.scenario,
@@ -167,6 +179,10 @@ class NetworkMapService:
             prot = cache.get_protection_footprint(act.activity_id)
             core = prot.core
 
+            # Find scheduled weeks for this activity across the active scenario
+            access_rows = self.schedule_source.get_accesses("A", activity_id=act.activity_id)
+            scheduled_weeks = sorted(set(acc.week for acc in access_rows))
+
             results.append({
                 "activityId": act.activity_id,
                 "contractNumber": act.contract_number,
@@ -180,6 +196,7 @@ class NetworkMapService:
                 "totalAccesses": act.total_accesses,
                 "lineCode": core.line_code,
                 "bound": core.bound.value,
+                "scheduledWeeks": scheduled_weeks,
                 "coreLocations": list(core.core_locations),
                 "bufferLocations": list(prot.buffer_locations),
                 "mirroredLocations": list(prot.mirrored_locations),

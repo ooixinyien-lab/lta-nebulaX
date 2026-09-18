@@ -55,5 +55,56 @@ export function resolveLocationDetails(locId) {
     };
   }
 
-  return { type: "unknown", locationId: locId, label: locId, bound: "", lineCode: "" };
+  // Station Key e.g. "ALP:S01", "BET:S12", "ALP:H01"
+  if (locId.includes(":")) {
+    const [lineCode, stnId] = locId.split(":");
+    const isInterchange = stnId === "H01" || stnId === "H02";
+    return {
+      type: "station",
+      locationId: locId,
+      stationId: stnId,
+      lineCode,
+      isInterchange,
+      bound: "Both (EB & WB)",
+      label: isInterchange
+        ? `Station ${stnId} · Interchange (${lineCode})`
+        : `Station ${stnId} · Line ${lineCode === "ALP" ? "Alpha" : "Beta"}`,
+      stationKey: locId,
+    };
+  }
+
+  // Plain station ID e.g. "H01", "S01"
+  return {
+    type: "station",
+    locationId: locId,
+    stationId: locId,
+    lineCode: "",
+    isInterchange: locId === "H01" || locId === "H02",
+    label: `Station ${locId}`,
+    stationKey: locId,
+    bound: "",
+  };
 }
+
+/**
+ * Returns EB and WB platform IDs for a given station.
+ */
+export function getStationPlatforms(lineCode, stationId) {
+  if (!lineCode || !stationId) return { ebPlatId: "", wbPlatId: "" };
+  return {
+    ebPlatId: `PLAT:${lineCode}:${stationId}:EB`,
+    wbPlatId: `PLAT:${lineCode}:${stationId}:WB`,
+  };
+}
+
+/**
+ * Finds next scheduled week after currentWeek from a sorted list of weeks.
+ * If no week is strictly greater, returns the first scheduled week.
+ */
+export function findNextScheduledWeek(scheduledWeeks = [], currentWeek = 1) {
+  if (!scheduledWeeks || scheduledWeeks.length === 0) return null;
+  const futureWeek = scheduledWeeks.find((w) => w > currentWeek);
+  if (futureWeek !== undefined) return futureWeek;
+  return scheduledWeeks[0];
+}
+

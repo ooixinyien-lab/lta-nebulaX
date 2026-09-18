@@ -7,6 +7,8 @@ import ScenarioSelector from "../components/network-map/ScenarioSelector";
 import LayerControls from "../components/network-map/LayerControls";
 import NetworkInspector from "../components/network-map/NetworkInspector";
 import ActivityFilter from "../components/network-map/ActivityFilter";
+import WeekStatusBar from "../components/network-map/WeekStatusBar";
+import NetworkSvgCanvas from "../components/network-map/NetworkSvgCanvas";
 
 describe("WeeklyScrubber Component", () => {
   it("initializes at Week 1 with Previous disabled", () => {
@@ -103,6 +105,24 @@ describe("WeeklyScrubber Component", () => {
     const pauseBtn = screen.getByRole("button", { name: /pause timeline/i });
     fireEvent.click(pauseBtn);
     expect(togglePlay).toHaveBeenCalled();
+  });
+
+  it("allows jumping directly to a week by clicking its indicator dot", () => {
+    const setWeek = vi.fn();
+    render(
+      <WeeklyScrubber
+        week={1}
+        setWeek={setWeek}
+        horizonWeeks={30}
+        startDate="2027-01-04"
+        isPlaying={false}
+        onTogglePlay={vi.fn()}
+      />
+    );
+
+    const dotWeek15 = screen.getByRole("button", { name: /jump to week 15/i });
+    fireEvent.click(dotWeek15);
+    expect(setWeek).toHaveBeenCalledWith(15);
   });
 });
 
@@ -211,6 +231,59 @@ describe("NetworkInspector Component", () => {
     expect(screen.getByText("ALP Station H01 Platform (EB)")).toBeDefined();
     expect(screen.getByText("ALP • EB")).toBeDefined();
   });
+
+  it("decomposes station inspection into EB and WB platforms with capacity meters", () => {
+    const mockOccupancy = {
+      locationOccupancy: {
+        "PLAT:ALP:S05:EB": {
+          locationId: "PLAT:ALP:S05:EB",
+          supplyCapacity: 2,
+          activeActivities: ["A005"],
+          peakOccupiedGroupCount: 1,
+          coShareGroups: [
+            { group: "g1", activities: ["A005"], pmCount: 0, pcCount: 0, cCount: 1, isCompliant: true },
+          ],
+        },
+        "PLAT:ALP:S05:WB": {
+          locationId: "PLAT:ALP:S05:WB",
+          supplyCapacity: 2,
+          activeActivities: [],
+          peakOccupiedGroupCount: 0,
+          coShareGroups: [],
+        },
+      },
+      protection: { explanations: [] },
+    };
+
+    render(
+      <NetworkInspector
+        selectedEntity={{ type: "station", id: "ALP:S05" }}
+        occupancy={mockOccupancy}
+        currentWeek={12}
+        onSelectActivity={vi.fn()}
+      />
+    );
+
+    expect(screen.getByText(/Station S05 · Line Alpha/i)).toBeDefined();
+    expect(screen.getByText(/EB Platform/i)).toBeDefined();
+    expect(screen.getByText(/WB Platform/i)).toBeDefined();
+  });
+
+  it("calls onClose when close button is clicked", () => {
+    const onClose = vi.fn();
+    render(
+      <NetworkInspector
+        selectedEntity={{ type: "station", id: "ALP:S05" }}
+        occupancy={{ locationOccupancy: {}, protection: { explanations: [] } }}
+        currentWeek={12}
+        onClose={onClose}
+      />
+    );
+
+    const closeBtn = screen.getByRole("button", { name: /close inspector/i });
+    fireEvent.click(closeBtn);
+    expect(onClose).toHaveBeenCalled();
+  });
 });
 
 describe("ActivityFilter Component", () => {
@@ -221,8 +294,11 @@ describe("ActivityFilter Component", () => {
         contractNumber: "C013",
         natureOfActivity: "Live",
         activityType: "Rail Grinding",
+        scheduledWeeks: [14, 15],
       },
     ];
+
+    const onJumpToWeek = vi.fn();
 
     const { rerender } = render(
       <ActivityFilter
@@ -231,6 +307,7 @@ describe("ActivityFilter Component", () => {
         onSelectActivity={vi.fn()}
         activeActivitiesInWeek={["A074"]}
         currentWeek={12}
+        onJumpToWeek={onJumpToWeek}
       />
     );
 
@@ -244,9 +321,99 @@ describe("ActivityFilter Component", () => {
         onSelectActivity={vi.fn()}
         activeActivitiesInWeek={[]}
         currentWeek={12}
+        onJumpToWeek={onJumpToWeek}
       />
     );
 
     expect(screen.getByText("Inactive W12")).toBeDefined();
+    const jumpBtn = screen.getByRole("button", { name: /jump to w14/i });
+    expect(jumpBtn).toBeDefined();
+
+    fireEvent.click(jumpBtn);
+    expect(onJumpToWeek).toHaveBeenCalledWith(14);
+  });
+});
+
+describe("WeekStatusBar Component", () => {
+  it("displays active activities and occupied location counts", () => {
+    const mockOccupancy = {
+      available: true,
+      activeActivities: ["A001", "A002"],
+      locationOccupancy: {
+        "SEC:ALP:S01_S02:EB": { supplyCapacity: 2, peakOccupiedGroupCount: 1 },
+        "SEC:ALP:S02_S03:EB": { supplyCapacity: 2, peakOccupiedGroupCount: 1 },
+      },
+    };
+
+    render(
+      <WeekStatusBar
+        week={12}
+        startDate="2027-01-04"
+        occupancy={mockOccupancy}
+        occLoading={false}
+      />
+    );
+
+    expect(screen.getByText("Week 12")).toBeDefined();
+    expect(screen.getByText("2 activities active")).toBeDefined();
+    expect(screen.getByText("2 locations occupied")).toBeDefined();
+    expect(screen.getByText("Normal operations")).toBeDefined();
+  });
+
+  it("displays error banner and triggers onRetry when clicked", () => {
+    const onRetry = vi.fn();
+    render(
+      <WeekStatusBar
+        week={12}
+        startDate="2027-01-04"
+        occError="Network timeout"
+        onRetry={onRetry}
+      />
+    );
+
+    expect(screen.getByText(/failed to load occupancy data/i)).toBeDefined();
+    const retryBtn = screen.getByRole("button", { name: /retry/i });
+    fireEvent.click(retryBtn);
+    expect(onRetry).toHaveBeenCalled();
+  });
+});
+
+describe("NetworkSvgCanvas Component", () => {
+  it("selects an unselected station and deselects it when clicked again", () => {
+    const onSelectEntity = vi.fn();
+    const setTooltip = vi.fn();
+    const layers = { core: true, buffers: true, mirrored: true, crossLine: true, capacity: true };
+
+    const { rerender } = render(
+      <NetworkSvgCanvas
+        layers={layers}
+        occupancy={{ locationOccupancy: {} }}
+        activities={[]}
+        selectedEntity={null}
+        onSelectEntity={onSelectEntity}
+        setTooltip={setTooltip}
+      />
+    );
+
+    // Click S01 station
+    const stnBtn = screen.getByRole("button", { name: /ALP Station S01/i });
+    fireEvent.click(stnBtn);
+    expect(onSelectEntity).toHaveBeenCalledWith({ type: "station", id: "ALP:S01" });
+
+    // Rerender with S01 as selectedEntity
+    rerender(
+      <NetworkSvgCanvas
+        layers={layers}
+        occupancy={{ locationOccupancy: {} }}
+        activities={[]}
+        selectedEntity={{ type: "station", id: "ALP:S01" }}
+        onSelectEntity={onSelectEntity}
+        setTooltip={setTooltip}
+      />
+    );
+
+    // Click S01 again -> should deselect (null)
+    fireEvent.click(stnBtn);
+    expect(onSelectEntity).toHaveBeenCalledWith(null);
   });
 });

@@ -33,7 +33,7 @@ export default function NetworkMap() {
   const horizonWeeks = context?.horizon?.weeks || 30;
   const startDate = context?.horizon?.startDate || "2027-01-04";
 
-  const { occupancy, loading: occLoading } = useNetworkOccupancy(
+  const { occupancy, loading: occLoading, error: occError } = useNetworkOccupancy(
     scenario,
     week,
     selectedActivityId
@@ -110,6 +110,14 @@ export default function NetworkMap() {
 
           {/* SVG Canvas Box */}
           <div className="svg-wrapper">
+            {occError && (
+              <div
+                role="status"
+                className="absolute top-3 left-3 right-3 bg-rose-950/90 border border-rose-800 text-rose-200 text-xs px-3 py-2 rounded-lg font-mono z-20"
+              >
+                Occupancy update failed: {occError}
+              </div>
+            )}
             {occLoading && (
               <div className="absolute top-3 right-3 bg-slate-950/80 border border-cyan-500/40 text-cyan-400 text-[10px] px-2.5 py-1 rounded-full font-mono flex items-center gap-1.5 z-20">
                 <span className="w-2 h-2 rounded-full bg-cyan-400 animate-ping" />

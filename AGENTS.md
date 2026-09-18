@@ -14,12 +14,14 @@ NebulaX is an enterprise-grade railway possession and maintenance scheduling sys
 1. **100% Workload Satisfaction:** Every activity's full workload must be scheduled ($\sum_w (2 x_{iw} + e_{iw}) \ge 2 d_i$). Dropping, deferring, or truncating activities is strictly prohibited.
 2. **Official Hard Constraint Compliance:** Zero violations of physical, safety, operational, and scenario constraints.
 3. **Official Score Minimisation:** Minimise penalties on hidden test instances across:
-   - Activity lateness penalty ($P$)
-   - Contract completion overrun penalty ($V$)
-   - Excess possession slot penalty ($E$)
+   - Weighted activity lateness ($P$), summed per activity against its contract's `planned_completion_date`.
+   - Excess possession slot count ($V$), summed across location-weeks and charged at 7 points per slot in Scenarios B/C.
+   - ECLO access count ($E$), counting `eclo=1` access rows and charged at 5 points per access in Scenarios B/C.
 4. **Scenario Handling:** Correctly solve Scenarios **A** (strict supply), **B** (strict completion dates), and **C** (balanced with ECLO windows).
 5. **Bounded Runtime & Robustness:** Reliable incumbent retention under tight solver timeouts; graceful handling of infeasibility.
 6. **Operational Value:** Verifiable disruption replanning and explainable scheduling decisions.
+
+Contract-level overrun is reported in `RESULTS.csv` and hard-forbidden in Scenario B; it is not an additional penalty on top of $P$. Follow the adoption plan's reconciled scoring definition and the scenario objectives below.
 
 ---
 
@@ -108,7 +110,7 @@ When implementing or modifying optimisation models and business logic, agents mu
 - Date mapping: Week $w$ finishes on ending Sunday: $\text{date}(w) = \text{start} + (7w - 1) \text{ days}$.
 - **Doubled Integer Units:** Use doubled units to avoid floating-point errors:
   - Standard access yield = 1.0 (doubled: **2**)
-  - Extended Clearance / Long Occupation (ECLO) yield = 1.5 (doubled: **3**)
+  - Early Closure / Late Opening (ECLO) yield = 1.5 (doubled: **3**)
   - Activity workload demand = $d_i$ (doubled: **$2 d_i$**)
   - Yield condition: $\sum_{w \in W} (2 x_{iw} + e_{iw}) \ge 2 d_i$
 
@@ -136,9 +138,11 @@ Within any location-week possession group:
 - Buffers are clamped at line termini.
 
 ### 5. Scenario Policies
-- **Scenario A (Strict Supply):** Supply is hard-capped by `04_LOCATION_SUPPLY.csv` ($E = 0$). Contract lateness is permitted but penalised.
-- **Scenario B (Strict Schedule):** Contract completion overrun is strictly prohibited ($V = 0$, hard constraint: complete on or before planned date). Supply can exceed nominal capacity (penalised). ECLO permitted.
-- **Scenario C (Balanced):** ECLO permitted only within line-specific multi-week windows. At most 1 excess slot per location-week ($e_{lw} \le 1$). Overruns and excess slots penalised.
+Let $v_{lw}$ be the excess occupied possession slots above nominal supply at location $l$ in week $w$, so $V = \sum_{l,w} v_{lw}$. This is separate from the ECLO access indicator $e_{iw}$ used in workload accounting.
+
+- **Scenario A (Strict Supply):** Supply is hard-capped by `04_LOCATION_SUPPLY.csv` ($V = 0$), and ECLO is hard-forbidden ($E = 0$). Planned-date lateness is permitted. Minimise $P$.
+- **Scenario B (Strict Schedule):** Every activity must complete on or before its contract's planned completion date, so contract overrun is hard-forbidden and $P = 0$. Supply can exceed nominal capacity with no additional published hard excess cap; ECLO is permitted anywhere in the horizon. Minimise $7V + 5E$.
+- **Scenario C (Balanced):** Planned-date lateness is permitted. At most 1 excess slot per location-week is allowed ($v_{lw} \le 1$). ECLO is permitted only within one selected span of at most 2 consecutive calendar weeks per affected line; cross-line Live accesses must fit both lines' windows. Minimise $P + 7V + 5E$.
 
 ### 6. Official 3-CSV Output Format
 All scenario runs must produce exactly these three CSVs matching official schemas:

@@ -10,6 +10,7 @@ from .database import Database
 from .db.seed import seed_official_instance
 from .api.ps1_routes import router as ps1_router
 from .api.ps1_network_routes import router as ps1_network_router
+from .api.schedule_insertion_routes import router as schedule_insertion_router
 
 
 try:
@@ -59,6 +60,7 @@ def create_app(settings: Settings | None = None):
         app.include_router(router)
     app.include_router(ps1_router)
     app.include_router(ps1_network_router)
+    app.include_router(schedule_insertion_router)
     if ps1_ui_router is not None:
         app.include_router(ps1_ui_router)
     app.mount("/static", StaticFiles(directory=ROOT / "frontend"), name="static")

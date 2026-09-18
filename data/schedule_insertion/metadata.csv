@@ -1,0 +1,10 @@
+key,value
+fixture_version,schedule-insertion-fixture-v1
+baseline_id,baseline-fixture-v1
+horizon_start,2027-01-04
+horizon_weeks,52
+timezone,Asia/Singapore
+maintenance_cycle_days,245
+coverage_interval_days,364
+maintenance_daily_capacity,3
+maintenance_reservation_policy,separate_from_official_residual_supply

@@ -67,3 +67,36 @@ export async function fetchNetworkOccupancy(scenario = "A", week = 1, activityId
     `occupancy for week ${week}`
   );
 }
+
+export async function fetchFullSchedule(scenario = "A", signal) {
+  const res = await fetch(`/api/ps1/network/full-schedule?scenario=${scenario}`, { signal });
+  if (!res.ok) {
+    throw new Error(`Failed to load full schedule: ${res.statusText}`);
+  }
+  return res.json();
+}
+
+export async function validateScheduleAPI(scenario, accesses, occupancies, signal) {
+  const res = await fetch("/api/ps1/network/validate-schedule", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ scenario, accesses, occupancies }),
+    signal,
+  });
+  if (!res.ok) {
+    throw new Error(`Failed to validate schedule: ${res.statusText}`);
+  }
+  return res.json();
+}
+
+export async function rescheduleWithSolver(scenario = "A", signal) {
+  const res = await fetch(`/api/ps1/network/reschedule?scenario=${scenario}`, {
+    method: "POST",
+    signal,
+  });
+  if (!res.ok) {
+    throw new Error(`Failed to reschedule with solver: ${res.statusText}`);
+  }
+  return res.json();
+}
+

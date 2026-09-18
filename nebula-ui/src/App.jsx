@@ -93,10 +93,17 @@ export default function App() {
             </span>
             <span className="text-slate-600">|</span>
             <button
+              onClick={() => setActiveTab('matrix')}
+              className="text-slate-300 hover:text-cyan-300 transition flex items-center gap-1.5 font-bold"
+            >
+              <Calendar size={13} /> Schedule Matrix &amp; Drag Dispatch
+            </button>
+            <span className="text-slate-600">|</span>
+            <button
               onClick={() => setActiveTab('upload')}
               className="text-slate-400 hover:text-slate-200 transition flex items-center gap-1.5"
             >
-              <Upload size={13} /> Data Ingestion &amp; Matrix Workspace
+              <Upload size={13} /> Data Ingestion
             </button>
             <span className="text-slate-600">|</span>
             <button

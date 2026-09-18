@@ -5,9 +5,12 @@ export function useNetworkOccupancy(scenario, week, selectedActivityId = null) {
   const [occupancy, setOccupancy] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
+  const [retryCount, setRetryCount] = useState(0);
 
   // Request race token to prevent older responses from overwriting newer ones
   const requestSeqRef = useRef(0);
+
+  const retry = () => setRetryCount((c) => c + 1);
 
   useEffect(() => {
     if (!scenario || !week) return;
@@ -32,6 +35,7 @@ export function useNetworkOccupancy(scenario, week, selectedActivityId = null) {
       } catch (err) {
         if (err.name !== "AbortError" && currentSeq === requestSeqRef.current) {
           setError(err.message || "Failed to load occupancy");
+          // Keep previous occupancy intact to avoid flashing blank state
         }
       } finally {
         if (currentSeq === requestSeqRef.current) {
@@ -45,7 +49,7 @@ export function useNetworkOccupancy(scenario, week, selectedActivityId = null) {
     return () => {
       controller.abort();
     };
-  }, [scenario, week, selectedActivityId]);
+  }, [scenario, week, selectedActivityId, retryCount]);
 
-  return { occupancy, loading, error };
+  return { occupancy, loading, error, retry };
 }

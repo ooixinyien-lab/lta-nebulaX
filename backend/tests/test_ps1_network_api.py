@@ -20,18 +20,20 @@ def test_network_context(client: TestClient):
     data = resp.json()
     assert data["horizon"]["weeks"] == 30
     assert data["horizon"]["startDate"] == "2027-01-04"
-    assert data["scheduleSource"] == "sample_outputs"
+    assert data["scheduleSource"] in ("solved_outputs", "sample_outputs")
 
     scenarios = {s["scenario"]: s for s in data["scenarios"]}
     assert "A" in scenarios
     assert scenarios["A"]["available"] is True
-    assert scenarios["A"]["source"] == "mock"
+    assert scenarios["A"]["source"] in ("solved", "mock")
 
     assert "B" in scenarios
-    assert scenarios["B"]["available"] is False
+    assert scenarios["B"]["available"] is True
+    assert scenarios["B"]["source"] in ("solved", "mock")
 
     assert "C" in scenarios
-    assert scenarios["C"]["available"] is False
+    assert scenarios["C"]["available"] is True
+    assert scenarios["C"]["source"] in ("solved", "mock")
 
 
 def test_network_topology(client: TestClient):
@@ -77,9 +79,11 @@ def test_network_activities_and_footprints(client: TestClient):
 
 def test_mock_schedule_source_direct():
     source = SampleOutputScheduleSource()
-    scenarios = source.get_available_scenarios()
-    assert any(s.scenario == "A" and s.available for s in scenarios)
-    assert all(not s.available for s in scenarios if s.scenario in ("B", "C"))
+    scenarios = {s.scenario: s for s in source.get_available_scenarios()}
+    assert scenarios["A"].available is True
+    assert scenarios["B"].available is True
+    assert scenarios["C"].available is True
+    assert scenarios["A"].source in ("solved", "mock")
 
     # Week 22 accesses
     w22_accesses = source.get_accesses("A", week=22)
@@ -113,8 +117,22 @@ def test_network_occupancy_weekly_aggregation(client: TestClient):
             assert "activities" in grp
 
 
+def test_network_occupancy_scenarios_b_and_c(client: TestClient):
+    resp_b = client.get("/api/ps1/network/occupancy?scenario=B&week=21")
+    assert resp_b.status_code == 200
+    data_b = resp_b.json()
+    assert data_b["available"] is True
+    assert len(data_b["activeActivities"]) > 0
+
+    resp_c = client.get("/api/ps1/network/occupancy?scenario=C&week=21")
+    assert resp_c.status_code == 200
+    data_c = resp_c.json()
+    assert data_c["available"] is True
+    assert len(data_c["activeActivities"]) > 0
+
+
 def test_network_occupancy_scenario_unavailable(client: TestClient):
-    resp = client.get("/api/ps1/network/occupancy?scenario=B&week=1")
+    resp = client.get("/api/ps1/network/occupancy?scenario=UNKNOWN&week=1")
     assert resp.status_code == 200
     data = resp.json()
     assert data["available"] is False

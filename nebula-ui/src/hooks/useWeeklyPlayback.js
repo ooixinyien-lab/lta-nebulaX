@@ -1,8 +1,8 @@
 import { useState, useEffect, useRef, useCallback } from "react";
-import { PLAYBACK_INTERVAL_MS } from "../network/mapConstants";
 
 export function useWeeklyPlayback(currentWeek, setWeek, horizonWeeks = 30) {
   const [isPlaying, setIsPlaying] = useState(false);
+  const [speed, setSpeed] = useState(1); // 0.5, 1, 2
   const timerRef = useRef(null);
 
   const stop = useCallback(() => {
@@ -38,6 +38,7 @@ export function useWeeklyPlayback(currentWeek, setWeek, horizonWeeks = 30) {
       return;
     }
 
+    const intervalMs = Math.round(1250 / speed);
     timerRef.current = setInterval(() => {
       setWeek((prevWeek) => {
         if (prevWeek >= horizonWeeks) {
@@ -46,7 +47,7 @@ export function useWeeklyPlayback(currentWeek, setWeek, horizonWeeks = 30) {
         }
         return prevWeek + 1;
       });
-    }, PLAYBACK_INTERVAL_MS);
+    }, intervalMs);
 
     return () => {
       if (timerRef.current) {
@@ -54,7 +55,7 @@ export function useWeeklyPlayback(currentWeek, setWeek, horizonWeeks = 30) {
         timerRef.current = null;
       }
     };
-  }, [isPlaying, horizonWeeks, setWeek, stop]);
+  }, [isPlaying, speed, horizonWeeks, setWeek, stop]);
 
-  return { isPlaying, play, stop, toggle };
+  return { isPlaying, play, stop, toggle, speed, setSpeed };
 }

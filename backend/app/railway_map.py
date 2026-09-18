@@ -23,6 +23,7 @@ class NetworkMapService:
         database: Database,
         settings: Settings | None = None,
         schedule_source: NetworkScheduleSource | None = None,
+        db_session_factory: Any = None,
     ) -> None:
         self.database = database
         self.settings = settings or Settings()
@@ -83,6 +84,7 @@ class NetworkMapService:
                 "weeks": horizon_weeks,
             },
             "scheduleSource": source_type,
+            "weeklySummary": weekly_summary,
             "scenarios": [
                 {
                     "scenario": s.scenario,
@@ -125,11 +127,12 @@ class NetworkMapService:
             "locations": [
                 {
                     "location_id": r.location_id,
-                    "location_kind": r.location_kind,
+                    "location_kind": r.location_kind.value,
                     "line_code": r.line_code,
-                    "bound": r.bound,
+                    "bound": r.bound.value,
                     "supply_capacity": r.supply_capacity,
                 }
+                for r in problem.locations
                 for r in problem.locations
             ],
         }
@@ -144,6 +147,10 @@ class NetworkMapService:
             prot = cache.get_protection_footprint(act.activity_id)
             core = prot.core
 
+            # Find scheduled weeks for this activity across the active scenario
+            access_rows = self.schedule_source.get_accesses("A", activity_id=act.activity_id)
+            scheduled_weeks = sorted(set(acc.week for acc in access_rows))
+
             results.append({
                 "activityId": act.activity_id,
                 "contractNumber": act.contract_number,
@@ -157,6 +164,7 @@ class NetworkMapService:
                 "totalAccesses": act.total_accesses,
                 "lineCode": core.line_code,
                 "bound": core.bound.value,
+                "scheduledWeeks": scheduled_weeks,
                 "coreLocations": list(core.core_locations),
                 "bufferLocations": list(prot.buffer_locations),
                 "mirroredLocations": list(prot.mirrored_locations),

@@ -9,6 +9,8 @@ from .database import Database
 from .db import create_engine_and_session, create_schema
 from .db.seed import seed_official_instance
 from .api.ps1_routes import router as ps1_router
+from .api.ps1_network_routes import router as ps1_network_router
+
 
 try:
     from .ps1.ps1_routes import router as ps1_ui_router
@@ -59,9 +61,26 @@ def create_app(settings: Settings | None = None):
     if router is not None:
         app.include_router(router)
     app.include_router(ps1_router)
+    app.include_router(ps1_network_router)
     if ps1_ui_router is not None:
         app.include_router(ps1_ui_router)
     app.mount("/static", StaticFiles(directory=ROOT / "frontend"), name="static")
+
+    nebula_dist = ROOT / "nebula-ui" / "dist"
+    if nebula_dist.is_dir():
+        nebula_assets = nebula_dist / "assets"
+        if nebula_assets.is_dir():
+            app.mount("/network-map/assets", StaticFiles(directory=nebula_assets), name="nebula_nm_assets")
+            app.mount("/assets", StaticFiles(directory=nebula_assets), name="nebula_assets")
+
+        @app.get("/network-map", include_in_schema=False)
+        @app.get("/network-map/{path:path}", include_in_schema=False)
+        def network_map_page(path: str = ""):
+            target_file = nebula_dist / path if path else nebula_dist / "index.html"
+            if target_file.is_file():
+                return FileResponse(target_file)
+            return FileResponse(nebula_dist / "index.html")
+
     @app.get("/", include_in_schema=False)
     def index():
         return FileResponse(ROOT / "frontend" / "index.html")

@@ -55,9 +55,10 @@ Be acutely aware of what is active vs. retired:
 - **Optimisation Solver:** Google OR-Tools CP-SAT (`ortools.sat.python.cp_model`).
 - **Web Framework:** FastAPI, Starlette, Uvicorn, Pydantic v2 (`ConfigDict(extra="forbid")`).
 - **Persistence:** SQLite with WAL mode, revision tokens, and audit logging.
-- **Frontend:** Vanilla JavaScript (native ES modules), HTML5, CSS3.
-  - **NO frontend build step.** No Webpack, no Vite, no Next.js.
-  - **DO NOT RUN `npm run dev`.** The frontend is statically served by FastAPI.
+- **Frontend:**
+  - **Modern UI (`nebula-ui/`):** React 19 + Vite + Tailwind CSS. Canonical location for new UI features (such as the Interactive SVG Network Map). Built into `nebula-ui/dist/` and served at `/network-map`.
+  - **Legacy Workspace (`frontend/`):** Vanilla JavaScript (native ES modules), HTML5, CSS3, served at `/`. Kept temporarily for teammate-owned scheduling workspace until migrated by its owning workstream. Do not introduce new feature implementations into `frontend/`.
+
 
 ### Essential Development Commands
 
@@ -82,6 +83,15 @@ pytest backend/tests/test_solver_v0.py backend/tests/test_solver_v1.py -v
 
 # Run optional JS syntax validation (requires Node)
 node scripts/check-js.mjs
+
+# Modern Vite/React Frontend (nebula-ui)
+cd nebula-ui
+npm install
+npm run dev        # Vite dev server on http://localhost:5173 (proxies /api to :8000)
+npm run build      # Production build to nebula-ui/dist/ (served at /network-map)
+npm run lint       # Run oxlint
+npm test           # Run Vitest test suite
+cd ..
 ```
 
 > [!WARNING]
@@ -191,10 +201,15 @@ Agents working on this codebase must adhere to the following rules:
 - Use explicit type annotations and field validators.
 - Never write ad-hoc dictionary passing where typed domain models are available.
 
-### Rule 3: Maintain Frontend Architecture
-- The frontend is pure native ES modules without build tooling.
-- **Never** add npm build frameworks (Webpack, Vite, React, Tailwind CLI, etc.) unless explicitly instructed by the user.
-- All styling belongs in [`frontend/styles.css`](file:///frontend/styles.css) and script logic in [`frontend/src/`](file:///frontend/src/).
+### Rule 3: Frontend Architecture
+- **Canonical UI (`nebula-ui/`):** New frontend features must use React with JSX/TSX and Vite.
+- `nebula-ui/` is the canonical location for new frontend UI development.
+- Do not introduce new feature implementations into the legacy `frontend/` application.
+- Legacy `frontend/` code remains temporarily for schedule functionality until migrated by its owning workstream.
+- Do not independently migrate or refactor teammate-owned scheduling pages while implementing new features.
+- Shared backend APIs must remain frontend-framework independent.
+- Styling for `nebula-ui` components belongs in `nebula-ui/src/styles/`.
+
 
 ### Rule 4: Data Safety & Git Hygiene
 - **Never commit:** `.env`, `.venv`, `*.sqlite3`, `.DS_Store`, or `__pycache__`.

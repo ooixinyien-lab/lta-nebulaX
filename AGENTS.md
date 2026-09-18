@@ -19,7 +19,7 @@ NebulaX is an enterprise-grade railway possession and maintenance scheduling sys
    - ECLO access count ($E$), counting `eclo=1` access rows and charged at 5 points per access in Scenarios B/C.
 4. **Scenario Handling:** Correctly solve Scenarios **A** (strict supply), **B** (strict completion dates), and **C** (balanced with ECLO windows).
 5. **Bounded Runtime & Robustness:** Reliable incumbent retention under tight solver timeouts; graceful handling of infeasibility.
-6. **Operational Value:** Verifiable disruption replanning and explainable scheduling decisions.
+6. **Operational Workflow:** Exact global-night dispatch, recurring maintenance generation, low-churn dynamic replanning, safe manual edits, and grounded chatbot explanations.
 
 Contract-level overrun is reported in `RESULTS.csv` and hard-forbidden in Scenario B; it is not an additional penalty on top of $P$. Follow the adoption plan's reconciled scoring definition and the scenario objectives below.
 
@@ -44,8 +44,10 @@ Be acutely aware of what is active vs. retired:
 | **PS1 Domain Models** | **ACTIVE (Authoritative)** | [`backend/app/domain_models.py`](file:///backend/app/domain_models.py) | Pydantic v2 domain schemas, enums, problem containers, output rows. |
 | **PS1 Data Ingestion & I/O** | **ACTIVE (Authoritative)** | [`backend/app/io.py`](file:///backend/app/io.py) | Ingests 8 official CSVs, checks relational integrity/DAG cycles, exports 3 CSV bundles. |
 | **PS1 Network Topology** | **ACTIVE (Authoritative)** | [`backend/app/topology.py`](file:///backend/app/topology.py) | $2k+1$ graph invariants, core footprints, buffers, Live mirroring, interchange effects. |
+| **PS1 Solver, Scoring & Validation** | **ACTIVE** | `backend/app/ps1/solver.py`, `scoring.py`, `validation.py`, `artifacts.py` | Shared A/B/C CP-SAT model, typed results, local validation and exact artifact checks. |
 | **PS1 Data Tests** | **ACTIVE (Passing)** | [`backend/tests/test_data_layer.py`](file:///backend/tests/test_data_layer.py) | 21 comprehensive tests for ingestion, topology, buffers, and exports. |
 | **Application Infra** | **ACTIVE (Keep)** | [`backend/app/database.py`](file:///backend/app/database.py), [`backend/app/config.py`](file:///backend/app/config.py), [`backend/app/auth/`](file:///backend/app/auth/) | FastAPI app, SQLite persistence, revision tokens, transaction audits, role identity. |
+| **Workflow Enrichments** | **PLANNED (Required)** | Future modules under `backend/app/ps1/` plus `backend/app/api/ps1_routes.py` | Calendarisation, recurrence, replan/churn, manual preflight and explanation fact packs. |
 | **Legacy Solver & Validator** | **RETIRED from PS1** | `backend/app/services/cp_sat.py`, `full_validator.py` | Single-night minute-level solver and validator. Kept for historical reference only. |
 | **Legacy `models.py`** | **DELETED** | (Formerly `backend/app/models.py`) | Removed in favor of `domain_models.py`. Note: Legacy test files importing `backend.app.models` are obsolete/pending update. |
 
@@ -80,8 +82,8 @@ python -m uvicorn backend.app.main:app --reload --host 127.0.0.1 --port 8000
 # Run PS1 Data Layer tests (all 21 passing)
 pytest backend/tests/test_data_layer.py -v
 
-# Run standalone prototype solver tests
-pytest backend/tests/test_solver_v0.py backend/tests/test_solver_v1.py -v
+# Run active PS1 solver/scoring/validation tests
+pytest backend/tests/test_ps1_scoring_validation.py backend/tests/test_ps1_solver.py -v
 
 # Run optional JS syntax validation (requires Node)
 node scripts/check-js.mjs
@@ -97,7 +99,7 @@ cd ..
 ```
 
 > [!WARNING]
-> Running bare `pytest` across all test files currently triggers collection errors in legacy test files (`test_api.py`, `test_full_solver.py`, etc.) because they still reference the deleted `backend.app.models`. When testing, execute target test suites like `pytest backend/tests/test_data_layer.py`.
+> Running bare `pytest` across all test files currently triggers collection errors in legacy test files because they still reference the deleted `backend.app.models`. Run targeted active suites unless the legacy collection boundary has been repaired.
 
 ---
 
@@ -150,6 +152,17 @@ All scenario runs must produce exactly these three CSVs matching official schema
 2. **`SCHEDULE_OCCUPANCY.csv`:** `activity_id,week,location_id,co_share_group`.
 3. **`RESULTS.csv`:** `scenario,contract_number,simulated_completion_date,overrun_days`.
 
+### 7. Operational Workflow Invariants
+
+- **Run modes:** `competition` uses only the official eight-file instance and is the only mode eligible for official export. `operational` may add typed enrichment inputs. `replan` derives from an immutable baseline plus an `as_of` time and revisioned changes.
+- **Global nights:** `service_date`/`global_night_id` are assigned by a separate calendarisation solver from an explicit `Asia/Singapore` calendar. Never equate `access_night` with a weekday or add operational fields to official CSVs.
+- **Recurring maintenance:** Generate station/sector jobs only from explicit versioned policies with a last completion and `max_interval_days`. Generated work is mandatory, consumes capacity once, and is excluded from official submissions.
+- **Dynamic replanning:** Freeze completed, occurred, in-progress and locked work; credit delivered yield; schedule all remaining work. For each selected A/B/C policy, minimise the scenario objective first and churn second. An enriched objective is labelled operational, not official. Do not combine the three scenario policies into one model.
+- **Churn:** Match persistent internal access IDs; count material future week/date, ECLO and sharing changes. Ignore pure group-label renaming and access-sequence renumbering.
+- **Manual moves:** Dragging creates a draft. Backend preflight and transactional save must use the same independent validator; stale, frozen or conflicting drafts cannot publish. A repair run pins the accepted move and replans only movable work.
+- **Chatbot:** Generate structured fact packs and use role-scoped read-only schedule tools. The language model cannot validate, mutate or publish schedules, and must fall back to a deterministic summary when unavailable.
+- **No partial success:** Calendarisation, recurrence or replanning infeasibility must retain the last validated plan and return evidence; never publish fabricated dates or truncated work.
+
 ---
 
 ## 6. Directory Structure & Key Files
@@ -170,23 +183,23 @@ lta-nebulaX/
 │   │   ├── domain_models.py       <-- Official PS1 Pydantic v2 models & enums
 │   │   ├── io.py                  <-- Official 8-CSV ingestion & 3-CSV export
 │   │   ├── topology.py            <-- Rail network graph, core & protection footprints
+│   │   ├── ps1/                   <-- Active solver, scoring, validation, artifacts; future workflow modules
+│   │   ├── db/                    <-- PS1 instance/run/result persistence
 │   │   ├── auth/                  <-- Role verification (Requester vs Officer)
-│   │   ├── api/                   <-- HTTP route handlers (routes.py)
+│   │   ├── api/                   <-- PS1 and legacy HTTP route handlers
 │   │   └── services/              <-- Legacy solver & validator (retired from PS1 path)
 │   └── tests/
 │       ├── test_data_layer.py     <-- Active test suite for PS1 data & topology
-│       ├── test_solver_v0.py      <-- Solver prototype tests
-│       └── test_solver_v1.py      <-- Solver prototype tests
+│       ├── test_ps1_scoring_validation.py
+│       └── test_ps1_solver.py
 ├── data/                          <-- 8 official CSVs (01_LINES.csv ... 08_ACTIVITY_DETAILS.csv)
 ├── docs/                          <-- Supplementary architectural specs & contracts
 │   ├── TEAM_WORK.md               <-- Workstream boundaries & deliverables
 │   ├── SOLVER.md                  <-- Optimisation solver formulations
 │   ├── API_CONTRACT.md            <-- REST API schemas
 │   └── TEST_REPORT.md             <-- Test execution reports
-├── frontend/                      <-- Vanilla JS frontend (served statically)
-│   ├── index.html                 <-- Single page app shell
-│   ├── styles.css                 <-- Application styles
-│   └── src/                       <-- ES modules (app.js, components/, pages/)
+├── nebula-ui/                     <-- Canonical React/Vite frontend for new features
+├── frontend/                      <-- Legacy vanilla-JS transition workspace
 └── scripts/                       <-- Utility scripts (dev.sh, check-js.mjs)
 ```
 
@@ -214,8 +227,14 @@ Agents working on this codebase must adhere to the following rules:
 - Shared backend APIs must remain frontend-framework independent.
 - Styling for `nebula-ui` components belongs in `nebula-ui/src/styles/`.
 
+### Rule 4: Preserve Official and Operational Boundaries
 
-### Rule 4: Data Safety & Git Hygiene
+- New recurrence/calendar/emergency fields belong to typed enrichment models, never the eight official CSV schemas.
+- The exact official three-CSV bundle cannot contain generated IDs, `service_date`, chatbot text or extra columns.
+- Keep original instance, enrichment, baseline run and solver/validator/prompt versions auditable.
+- Scheduling and conflict truth remains server-side. The frontend and chatbot render structured results; they do not reimplement hard rules.
+
+### Rule 5: Data Safety & Git Hygiene
 - **Never commit:** `.env`, `.venv`, `*.sqlite3`, `.DS_Store`, or `__pycache__`.
 - All data in `data/` is synthetic. This repository does not connect to live railway control or signaling networks.
 - Before committing changes, run relevant tests to ensure no regressions:
@@ -223,6 +242,6 @@ Agents working on this codebase must adhere to the following rules:
   pytest backend/tests/test_data_layer.py
   ```
 
-### Rule 5: Keep Changes Scoped
+### Rule 6: Keep Changes Scoped
 - Respect workstream boundaries from [`docs/TEAM_WORK.md`](file:///docs/TEAM_WORK.md).
 - Do not refactor unrelated modules when fixing a specific bug or implementing a single milestone feature.

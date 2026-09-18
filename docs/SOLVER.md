@@ -19,18 +19,18 @@ The official PS1 challenge replaces the synthetic, single-night minute-level sch
 3. **Minimise the official penalty on hidden instances**.
 4. **Handle Scenarios A, B and C correctly**.
 5. **Solve reliably within a bounded runtime**.
-6. **Demonstrate useful explanations and disruption replanning**.
+6. **Deliver exact global nights, recurring maintenance, low-churn replanning, safe manual edits and grounded explanations**.
 
 ---
 
 ## 2. Official Mathematical Formulation
 
 ### Sets and Dimensions
-- **Activities $I$:** 54 activities from `08_ACTIVITY_DETAILS.csv`.
-- **Contracts / Budget Groups $C$:** 14 contracts from `07_PROJECT_DETAILS.csv`.
-- **Weeks $W$:** Planning horizon `1..30` (starts 2027-01-04 through 2027-08-01).
-- **Locations $L$:** 76 bound-specific tunnel and platform locations from `04_LOCATION_SUPPLY.csv`.
-- **Lines $R$:** Two lines (`ALP`, `BET`).
+- **Activities $I$:** Every activity in `08_ACTIVITY_DETAILS.csv` (54 in the public instance).
+- **Contracts / Budget Groups $C$:** Every contract/type group in `07_PROJECT_DETAILS.csv` (14 public contracts).
+- **Weeks $W$:** Input planning horizon `1..H` (`1..30`, 2027-01-04 through 2027-08-01 publicly).
+- **Locations $L$:** Bound-specific tunnel and platform locations from `04_LOCATION_SUPPLY.csv` (76 publicly).
+- **Lines $R$:** Input line codes (`ALP`, `BET` publicly).
 - **Local Nights $N_c$:** Local night indices `1..K_c` per contract/type/week, where $K_c$ is the CSV weekly cap.
 - **Possession Groups:** Candidate shared possession slots scoped to each location and week (`co_share_group`).
 
@@ -41,7 +41,7 @@ Three dimensions remain strictly separated:
 
 ### Decision Variables
 - $x_{iw} \in \{0, 1\}$: activity $i$ receives an access in week $w$.
-- $e_{iw} \in \{0, 1\}$: that access uses Extended Clearance / Long Occupation (ECLO); $e_{iw} \le x_{iw}$.
+- $e_{iw} \in \{0, 1\}$: that access uses Early Closure / Late Opening (ECLO); $e_{iw} \le x_{iw}$.
 - $z_{iwn} \in \{0, 1\}$: assignment of activity $i$ in week $w$ to contract local night $n \in \{1..K_c\}$.
 - $y_{iwlg} \in \{0, 1\}$: assignment of activity $i$ in week $w$ to possession group $g$ at location $l$.
 - $u_{lwg} \in \{0, 1\}$: indicator that possession group $g$ is occupied at location $l$ in week $w$.
@@ -117,26 +117,57 @@ Let:
 
 ---
 
-## 6. Official Module Architecture (`backend/app/ps1/`)
+## 6. Operational Enrichment Formulation
 
-| Module | Responsibility |
-|---|---|
-| `backend/app/ps1/models.py` | Typed domain classes for official entities, scenarios, accesses, occupancies, and results. |
-| `backend/app/ps1/io.py` | Ingestion, validation, and normalisation of the 8 official CSV files. |
-| `backend/app/ps1/topology.py` | Network graph, core spans, buffer calculation, mirrored closure, and interchange crossover. |
-| `backend/app/ps1/solver.py` | Official CP-SAT solver implementing the multi-week, possession, and scenario model. |
-| `backend/app/ps1/validation.py` | Independent post-solve verification of exported schedules against official rules. |
-| `backend/app/ps1/export.py` | Export of the 3 mandatory scenario CSVs (`SCHEDULE_ACCESS.csv`, `SCHEDULE_OCCUPANCY.csv`, `RESULTS.csv`). |
+These are required NebulaX workflow layers, not official score terms. `competition` runs remain eight-file-only and official-export eligible; `operational` runs may add versioned calendars, recurrence policies and emergency jobs.
+
+### Calendarisation
+
+After weekly solving, introduce a binary choice for each access and eligible Singapore `service_date` in its week. Choose exactly one date, align all footprint rows and co-share-group members on that global night, and enforce explicit date-level capacity, protection, ECLO, workfront and predecessor rules. `access_night` remains a local contract/type/week index and is never converted directly to a weekday.
+
+If no date assignment exists, return the conflicting weekly pattern to the main solve as a cut or neighbourhood to repair. Do not publish partially dated schedules. The selected scenario objective remains primary; date balancing and movement are secondary operational objectives.
+
+### Recurrence
+
+For each explicit station/sector policy, generate stable mandatory occurrences from `last_completed_date`, `max_interval_days`, effective horizon and a complete job template. Exact service dates must satisfy:
+
+\[
+date_{k}-date_{k-1}\le interval\_days
+\]
+
+including the carry-in completion and horizon-end due boundary. Early completion cannot create a later oversized gap. Generated work uses the same workload, footprint, possession and safety constraints but is excluded from official CSV submissions. Never infer recurrence from nominal supply or subtract the same maintenance twice.
+
+### Dynamic replanning and churn
+
+Freeze completed/occurred, in-progress and manually locked accesses at an explicit `as_of` instant. Credit their delivered yield and solve all remaining mandatory work, including new emergency/ad-hoc and recurring jobs. Amendments apply from their effective time, not retroactively. Apply one selected A, B or C policy per run; optimise movable future variables while reporting full-plan and remaining-horizon metrics.
+
+Optimise lexicographically: hard feasibility and recurrence; then the selected scenario objective `O_s`; then churn with `O_s=O_s*` by default. `O_s` is official only for an eligible competition run; over generated/ad-hoc work it is a PS1-derived `operational_scenario_cost`. A separately approved degradation tolerance may relax equality and must be reported. Churn matches persistent internal access IDs and measures material future week/date, day-distance, ECLO and sharing changes; pure label renaming and sequence renumbering cost zero.
+
+### Manual edits and explanations
+
+A dragged placement is a pinned draft, not a published mutation. The independent validator returns structured hard conflicts and warnings; a repair solve keeps the pin and replans movable work. Save repeats validation against current revisions. Explanation fact packs contain stored placements, diffs, binding rules, score/churn deltas and measured counterfactuals. A chatbot may verbalise those facts through scoped read-only tools but cannot solve, validate or publish.
 
 ---
 
-## 7. Legacy Synthetic Solver (Historical Reference)
+## 7. Official Module Architecture
+
+| Module | Responsibility |
+|---|---|
+| `backend/app/domain_models.py` | Canonical official problem and CSV row types. |
+| `backend/app/io.py` | Ingestion/normalisation of the 8 official CSVs and exact 3-CSV writing. |
+| `backend/app/topology.py` | Network graph, core spans, buffers, mirrored closure and interchange crossover. |
+| `backend/app/ps1/models.py` | Typed solver options, statuses, result and validation summaries. |
+| `backend/app/ps1/solver.py` | Official CP-SAT solver implementing the multi-week, possession, and scenario model. |
+| `backend/app/ps1/scoring.py` | Independent official-score reconstruction. |
+| `backend/app/ps1/validation.py` | Independent post-solve verification of exported schedules against official rules. |
+| `backend/app/ps1/artifacts.py` | Strict artifact re-read and round-trip checks. |
+| Planned `backend/app/ps1/` workflow modules | Calendarisation, recurrence, replan/churn, manual preflight and explanation facts. |
+
+---
+
+## 8. Legacy Synthetic Solver (Historical Reference)
 
 The legacy single-night CP-SAT solver (`backend/app/services/cp_sat.py`) and validator (`backend/app/services/full_validator.py`):
 - Designed around single-night minute grids, synthetic engineer qualifications, named equipment, and partial recovery (deferring work).
 - **Retired from official PS1 scoring:** Deferring requests in recovery violates PS1's mandatory complete-workload rule.
-- Retained as a functional teaching scaffold and baseline for legacy application integration tests.
-- Executable via:
-  ```sh
-  python -m backend.app.services.cp_sat --planning-date 2026-09-14 --time-limit 8
-  ```
+- Retained only as a historical teaching scaffold. It may not import while the deleted legacy domain module is absent and must not be presented as the active execution path.

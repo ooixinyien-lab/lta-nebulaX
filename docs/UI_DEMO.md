@@ -3,7 +3,7 @@
 > [!NOTE]
 > **AUTHORITATIVE SOURCE OF TRUTH: [PS1_OFFICIAL_ADOPTION_PLAN.md](../PS1_OFFICIAL_ADOPTION_PLAN.md)**  
 > This document describes the mock UI demo mode for the legacy single-night prototype (`demo-snapshot.json`).
-> For the official PS1 challenge, the frontend will consume the official PS1 API contract (`/api/ps1/...`) to support 8-CSV instance upload, multi-week timeline inspection, Scenario A/B/C comparisons, and disruption replan visualizations as specified in [PS1_OFFICIAL_ADOPTION_PLAN.md](../PS1_OFFICIAL_ADOPTION_PLAN.md).
+> New PS1 and operational features belong in `nebula-ui/` and consume `/api/ps1/...`: eight-file upload, scenario comparison, exact global nights, recurrence, low-churn replanning, manual-edit preflight and grounded explanations. This legacy fixture is not their implementation.
 
 Set `UI_DEMO=true` in `.env` and restart the Python server. This option is active
 only with `APP_ENV=development` and `AUTH_MODE=demo`. Set it to `false` and restart
@@ -24,5 +24,9 @@ The normal SQLite database is not modified by these actions.
 Overlap hints check shared sectors, engineers and equipment only. The preset is
 for UI development and is not solver validated; backend constraints and resource
 outages do not govern mock scheduling. Demo changes are not shared across browsers.
+
+The legacy drag behaviour must not be reused as PS1 conflict authority. In the canonical workflow, a drag creates a draft sent to backend preflight with run/revision/access IDs and the proposed week or `service_date`. The server checks the complete official and operational rule set, returns structured conflicts/warnings, and repeats validation before save. Exact dates come from an explicit calendarisation result; `access_night` is never shown as a weekday.
+
+Likewise, any future chatbot belongs to the canonical UI. It receives a deterministic, role-scoped explanation fact pack for the selected run/activity and may use only read-only schedule tools. It cannot operate on this browser-local fixture as if it were a validated PS1 plan.
 
 Check with `node scripts/check-ui-demo.mjs` and `node scripts/check-js.mjs`.

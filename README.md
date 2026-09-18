@@ -16,7 +16,7 @@
 3. Minimise the official penalty on hidden instances.
 4. Handle Scenarios A, B, and C correctly.
 5. Solve reliably within a bounded runtime.
-6. Demonstrate useful explanations and disruption replanning.
+6. Deliver exact global-night dispatch, recurring maintenance, low-churn dynamic replanning, safe manual edits, and grounded chatbot explanations.
 
 ---
 
@@ -33,11 +33,12 @@ NebulaX originally provided a runnable synthetic maintenance-scheduling prototyp
 | **Scenarios** | Single strict vs recovery mode | **Scenarios A (strict supply), B (strict dates), C (balanced)** |
 | **Inputs** | `comprehensive_synthetic_data.json` | **8 Official CSVs** (`01_LINES.csv` ... `08_ACTIVITY_DETAILS.csv`) |
 | **Exports** | SQLite database rows / JSON API | **3 Official CSVs** (`SCHEDULE_ACCESS.csv`, `SCHEDULE_OCCUPANCY.csv`, `RESULTS.csv`) |
-| **Solver Path** | `backend/app/services/cp_sat.py` (Historical) | `backend/app/ps1/` (`models.py`, `io.py`, `solver.py`, `validation.py`, `export.py`) |
+| **Solver Path** | `backend/app/services/cp_sat.py` (Historical) | Canonical data in `domain_models.py`/`io.py`/`topology.py`; solver, scoring, validation and artifacts in `backend/app/ps1/` |
+| **Operational Detail** | Synthetic minute timestamps | Separate exact-date calendarisation, recurrence and replan layers; never infer weekdays from official `access_night` |
 
 ---
 
-## Start here (Legacy Prototype UI)
+## Start here
 
 The existing web UI demonstrates the application infrastructure:
 **One website. One login system. Two roles.**
@@ -47,7 +48,7 @@ The existing web UI demonstrates the application infrastructure:
 
 The API enforces these permissions; hiding a button is not the permission check. In local demo mode the identities are deliberately simulated, so anyone with local access can select the officer. Do not expose demo mode publicly.
 
-The full-stack scaffolding uses **plain HTML, CSS and native JavaScript modules**, served by FastAPI without requiring Node or npm build servers. The official PS1 upload/solve/export contract will be integrated alongside this infrastructure.
+New UI work belongs in **`nebula-ui/` (React + Vite)**. The legacy `frontend/` is still served at `/` during transition; do not add the new scheduling workflow there. FastAPI owns all scheduling, validation, conflict and explanation facts.
 
 ## 1. Run it on your laptop
 
@@ -82,9 +83,19 @@ Synthetic JSON is not loaded during PS1 startup. The legacy API currently cannot
 
 Leave the terminal running while you use the app. Press `Ctrl+C` to stop it. After the first setup, run `sh scripts/dev.sh` on macOS/Linux or `./scripts/dev.ps1` in PowerShell.
 
-**Do not run `npm run dev`: this version has no frontend build server.** The small `frontend/package.json` only supports optional JavaScript syntax checking.
+For modern UI development, run Vite separately:
 
-## 2. Try the legacy synthetic workflow
+```sh
+cd nebula-ui
+npm install
+npm run dev
+```
+
+Vite serves `http://127.0.0.1:5173` and proxies `/api` to FastAPI. For a production-style check, run `npm run build`; FastAPI serves the built app at `/network-map` when `nebula-ui/dist/` exists.
+
+## 2. Historical legacy synthetic workflow
+
+This sequence documents the retired prototype and is not a runnable current-main walkthrough while `backend.app.models` is absent:
 
 1. Choose **Planning officer**. A fresh canonical database contains the 12 comprehensive synthetic requests.
 2. Click **Generate proposal**. The legacy full solver first attempts a complete strict schedule, then runs recovery only if strict infeasibility is proved.
@@ -102,41 +113,41 @@ Per [PS1_OFFICIAL_ADOPTION_PLAN.md](PS1_OFFICIAL_ADOPTION_PLAN.md), implementati
 
 | Workstream | Main files | Ownership and responsibilities |
 |---|---|---|
-| **Data / I/O** | `backend/app/ps1/io.py`, `topology.py`, official CSV inputs | Parse all 8 official CSVs, preserve IDs, composite-key topology, core and buffer footprints, export CSV round-trips. |
+| **Data / I/O** | `backend/app/domain_models.py`, `backend/app/io.py`, `backend/app/topology.py`, official CSV inputs | Parse all 8 official CSVs, preserve IDs, composite-key topology, core and buffer footprints, export CSV round-trips. |
 | **Optimisation** | `backend/app/ps1/solver.py`, `validation.py` | CP-SAT multi-week/possession/workload model, mandatory 100% workload yield, Scenarios A/B/C constraints, exact penalty objectives. |
-| **Backend / API** | `backend/app/ps1/models.py`, `export.py`, `backend/app/api/ps1_routes.py`, `database.py` | Instance upload, run execution, scenario result storage, official 3-CSV export endpoints, transaction/audit integrity. |
-| **Frontend / Presentation** | `frontend/`, presentation materials | Instance upload UI, scenario A/B/C comparison, disruption replan visualisation, 3-minute video and slide deck. |
+| **Backend / API** | `backend/app/ps1/models.py`, `artifacts.py`, `backend/app/api/ps1_routes.py`, `backend/app/db/` | Instance upload, run execution, scenario result storage, official 3-CSV export endpoints, transaction/audit integrity. |
+| **Operational Workflow** | Planned modules under `backend/app/ps1/` | Exact-date calendarisation, recurrence generation, emergency input, lexicographic churn and manual-edit preflight. |
+| **Frontend / Explanation** | `nebula-ui/`, presentation materials | Operational schedule UI, scenario comparison, drag/move drafts, structured conflicts, grounded chatbot and demo. |
 
 ### Adoption Milestones:
 1. **Milestone 1: Official Correctness** — 8 CSV parsing, complete-workload A/B/C solving, exact 3 CSV exports (`SCHEDULE_ACCESS.csv`, `SCHEDULE_OCCUPANCY.csv`, `RESULTS.csv`), zero official hard violations.
 2. **Milestone 2: Competitive Optimisation** — Exact penalty optimisation, greedy seeds/hints, symmetry breaking, and targeted LNS reoptimisation.
 3. **Milestone 3: Hidden-Instance Hardening** — Bounded runtimes, upload/run isolation, failure handling, disruption replanning demonstrations, and official submission packaging.
+4. **Milestone 4: Operational Scheduling** — Exact global nights, recurring jobs, emergency updates, frozen history, and scenario-first/minimum-churn replanning.
+5. **Milestone 5: Decision Support** — Transactional manual-move validation/repair and grounded schedule explanations/chat.
 
 Read [PS1_OFFICIAL_ADOPTION_PLAN.md](PS1_OFFICIAL_ADOPTION_PLAN.md) and [docs/TEAM_WORK.md](docs/TEAM_WORK.md) for full task definitions.
 
 ## 4. Architecture and execution paths
 
 ```text
-Browser: frontend/
-  login -> requester OR officer pages
+Browser: nebula-ui/ (canonical) or frontend/ (legacy transition)
        |
-       | HTTP requests to /api/...
+       | authenticated HTTP requests
        v
-FastAPI: backend/app/
-  +--> api/ps1_routes.py [OFFICIAL PS1 PATH - In Adoption]
-  |      |
-  |      +--> ps1/io.py: parses 8 official CSVs
-  |      +--> ps1/topology.py: core, buffer, mirror & interchange footprints
-  |      +--> ps1/solver.py: CP-SAT multi-week & possession packing solver
-  |      +--> ps1/validation.py: independent PS1 verification
-  |      +--> ps1/export.py: exports 3 scenario CSV bundles
-  |
-  +--> api/routes.py [LEGACY SYNTHETIC PATH - Scaffolding Only]
-         |
-         +--> database.py: SQLite records and revision numbers
-         +--> services/checker.py: legacy synthetic conflict rules
-         +--> services/cp_sat.py: legacy single-night solver (RETIRED from PS1 path)
-         +--> services/full_validator.py: legacy 9-rule validator
+FastAPI: backend/app/api/ps1_routes.py
+       |
+       +--> domain_models.py + io.py + topology.py
+       |      official 8-CSV model and geometry
+       +--> ps1/solver.py + scoring.py + validation.py + artifacts.py
+       |      shared weekly A/B/C solve and exact official exports
+       +--> db/
+       |      immutable instances, revisions, runs, results and audit
+       +--> planned operational workflow
+              recurrence generation -> weekly solve -> calendarisation
+              -> date validation -> replan/manual repair -> explanation facts
+
+Legacy api/routes.py and services/* remain isolated historical scaffolding.
 ```
 
 ## 5. Folder map
@@ -155,13 +166,16 @@ nebulaX/
       config.py                  Application configuration
       database.py                SQLite persistence, transaction & audit logging
       auth/                      Identity and server-enforced role verification
-      ps1/                       [NEW] Official PS1 implementation package
-        models.py                Official PS1 domain entities & scenario schemas
-        io.py                    8-CSV loader, schema validation & normalisation
-        topology.py              Footprint, buffer, mirrored closure & interchange logic
+      domain_models.py           Canonical official PS1 types
+      io.py                      8-CSV loader and exact 3-CSV writer
+      topology.py                Footprint, buffer, mirrored closure & interchange logic
+      ps1/                       Official solver and planned workflow package
+        models.py                Solver/result/status schemas
         solver.py                Official CP-SAT weekly access & possession solver
-        validation.py            Independent rule checking & official-validator adapter
-        export.py                Official 3-file CSV exporter & results calculator
+        scoring.py               Independent score reconstruction
+        validation.py            Independent adopted-rule checks
+        artifacts.py             Strict official artifact readers/round trips
+      db/                        PS1 SQLite records and repositories
       api/
         routes.py                Legacy synthetic API routes (transition contract)
         ps1_routes.py            [NEW] Official PS1 instance, solve & export endpoints
@@ -173,25 +187,33 @@ nebulaX/
     tests/                       Automated tests (unit, integration, legacy regression)
   data/                          Historical synthetic datasets and learning scripts
   docs/                          Technical contracts, solver guides, and team notes
+  nebula-ui/                     Canonical React/Vite frontend
+  frontend/                      Legacy vanilla-JS transition workspace
 ```
 
 ## 6. Solver execution
 
 ### Official PS1 Solver
-The official solver executes against the 8 official CSV files for Scenarios A, B, and C, ensuring 100% activity workload satisfaction across the 30-week horizon. See [PS1_OFFICIAL_ADOPTION_PLAN.md](PS1_OFFICIAL_ADOPTION_PLAN.md) and [docs/SOLVER.md](docs/SOLVER.md) for execution details.
-
-### Legacy Single-Night Synthetic Solver (Scaffolding Reference)
-From your activated environment, you can run the historical synthetic solver:
+The official solver executes against the 8 official CSV files for Scenarios A, B, and C, requiring 100% activity workload satisfaction across the 30-week horizon:
 
 ```sh
-python -m backend.app.services.cp_sat --planning-date 2026-09-14 --time-limit 8
+python -m backend.app.ps1 --data-dir data --scenario all --output-dir outputs --time-limit 60
 ```
 
-For structured JSON output:
+See [PS1_OFFICIAL_ADOPTION_PLAN.md](PS1_OFFICIAL_ADOPTION_PLAN.md) and [docs/SOLVER.md](docs/SOLVER.md) for execution details and validation limitations.
 
-```sh
-python -m backend.app.services.cp_sat --planning-date 2026-09-14 --time-limit 8 --json
-```
+### Operational workflow roadmap
+
+The official weekly result is the foundation, not a claim about a physical weekday. The required operational pipeline will:
+
+1. generate mandatory jobs from explicit station/sector recurrence policies;
+2. solve all official and operational work under one selected A/B/C policy;
+3. map weekly accesses to exact Singapore service dates with a separate calendar solver;
+4. freeze occurred work and replan dynamic/emergency changes with scenario score first and churn second;
+5. validate drag/move drafts server-side and optionally repair the remaining schedule; and
+6. explain displacement and answer schedule questions from structured read-only facts.
+
+Operational fields and generated IDs never appear in an official three-CSV bundle. The legacy single-night solver remains historical and may not import while its deleted domain module is absent.
 
 ## 7. Identity and auth
 
@@ -212,14 +234,22 @@ NebulaX includes role-based identity supporting simulated local demo identities 
 - **Scenarios:** Strict supply (A), Strict schedule with flexible supply & ECLO (B), Balanced with ECLO windows and max 1 excess slot/loc-week (C).
 - **Deliverables:** 3 official CSV bundles per scenario (`SCHEDULE_ACCESS.csv`, `SCHEDULE_OCCUPANCY.csv`, `RESULTS.csv`), disruption replan demonstration, hosted application, and submission video.
 
+**Required Operational Enrichments (Planned):**
+
+- A calendarisation solver assigns `service_date`/`global_night_id`; `access_night` remains a local weekly index, not a weekday.
+- Explicit recurrence policies generate mandatory station/sector jobs without double-counting supply reductions.
+- Emergency/ad-hoc replans freeze occurred, in-progress and locked work, then optimise each selected scenario objective before minimum churn.
+- Manual drag/move creates a draft and structured backend conflict preflight; publication revalidates transactionally.
+- A grounded chatbot explains displaced work and supports general schedule questions through scoped read-only tools; it cannot validate or publish plans.
+
 ## 9. Test it
 
 ```sh
 python -m pip install -r requirements-dev.txt
-python -m pytest -q
+python -m pytest backend/tests/test_data_layer.py backend/tests/test_ps1_scoring_validation.py backend/tests/test_ps1_solver.py -q
 ```
 
-For the complete suite, use `requirements-dev.txt`; it includes OR-Tools and pytest.
+`requirements-dev.txt` includes OR-Tools and pytest. Avoid bare `pytest` while obsolete legacy tests still import the deleted `backend.app.models` module.
 
 Optional JavaScript syntax check (requires Node, not needed to run the app):
 
@@ -235,7 +265,7 @@ See [docs/TEST_REPORT.md](docs/TEST_REPORT.md) for what was actually tested befo
 |---|---|
 | `No module named backend` | Run commands from the repository root, not from inside `backend/`. |
 | `No module named uvicorn` | Use the `.venv` interpreter and install `requirements-cpsat.txt`. |
-| Browser cannot connect | Keep the server terminal running and open `http://127.0.0.1:8000`, not port 5173. |
+| Browser cannot connect | FastAPI/legacy UI uses `http://127.0.0.1:8000`; Vite development uses `http://127.0.0.1:5173` with FastAPI also running. |
 | Solver says `UNAVAILABLE` | Install `requirements-cpsat.txt`, or explicitly select `demo_search` for the tiny fixture. |
 | Solver says `INPUT_ERROR` | Read the field/request identifier in the message; canonical data is validated before model construction. |
 | Supabase requester sees no seed jobs | Seed jobs belong to fictional demo owners. A real requester starts by submitting their own job. Officers see all seed jobs. |

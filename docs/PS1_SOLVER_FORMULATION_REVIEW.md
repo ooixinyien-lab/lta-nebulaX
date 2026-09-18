@@ -1,10 +1,12 @@
-**PS1 solver formulation and coding handoff — formulation accepted, 18 September 2026**
+# PS1 Solver Formulation Review
 
-The user has accepted this mathematical formulation as the implementation basis. The unresolved official-rule details remain explicit below. This document does not change the authoritative [PS1_OFFICIAL_ADOPTION_PLAN.md](../PS1_OFFICIAL_ADOPTION_PLAN.md). The source handout is [PS1_README.md](../NebulaX-Hackathon-ProblemStatement-main/PS1/PS1_README.md), especially sections 2.4–2.7. No solver implementation is included in this change.
+**Official weekly formulation accepted 18 September 2026; operational enrichment addendum accepted 19 September 2026.**
+
+The user accepted this mathematical formulation as the implementation basis. The unresolved official-rule details remain explicit below. This document does not change the authoritative [PS1_OFFICIAL_ADOPTION_PLAN.md](../PS1_OFFICIAL_ADOPTION_PLAN.md). The source handout is [PS1_README.md](../NebulaX-Hackathon-ProblemStatement-main/PS1/PS1_README.md), especially sections 2.4–2.7. The active implementation now lives in `backend/app/ps1/`; this review records the intended formulation and later workflow extensions.
 
 Build one binary/integer scheduling model with three scenario policies. An ordinary continuous LP could assign fractions of an access or possession; those are not valid output decisions. The established accounting rules below have an integer linear formulation. OR-Tools CP-SAT is the intended implementation technology and also supports logical and maximum constraints directly.
 
-Provide one solver entry point, conceptually `solve_ps1(problem, scenario, options) -> PS1SolveResult`. These are proposed interface names, not existing functions. A request for all scenarios invokes the same implementation three times with scenario A, B and C. Each invocation creates its own model, decision variables, search state and result; scenario constraints must not leak between runs. Reuse the common model-building code and add the selected policy and objective. Do not maintain three copied solver implementations. The outcome is three separately optimized schedules, each with its own three-CSV answer bundle.
+The shared entry point is `solve_ps1(problem, scenario, options) -> PS1SolveResult`. A request for all scenarios invokes the same implementation three times with scenario A, B and C. Each invocation creates its own model, decision variables, search state and result; scenario constraints must not leak between runs. Reuse the common model-building code and add the selected policy and objective. Do not maintain three copied solver implementations. The outcome is three separately optimised schedules, each with its own three-CSV answer bundle.
 
 The objectives and accounting below follow the adoption plan's reconciliation of the handout. A fully verified official model still needs the absent official checker: exact closure/co-sharing compatibility, interchange protection boundaries, and the predecessor week comparator remain unresolved. Keep those policies explicit; do not claim that the equations below alone establish official safety compliance.
 
@@ -284,7 +286,7 @@ Build `eclo_summary` from the returned schedule, with these fields:
 
 Report the chosen C window separately from the weeks actually used: a two-week permitted window may contain ECLO work in only one week. For an ECLO access affecting both lines, count the row once in `eclo_accesses_total` and `by_week`, but include it under both lines in `by_line`. Never sum the affected-line counts to obtain E.
 
-Timing precision is weekly. Derive week start as `horizon_start + 7*(week-1)` days and week end as `horizon_start + (7*week-1)` days. The official access_night is local to contract/type/week; access_night=2 does not mean Tuesday. Neither local night indices nor local group labels establish a shared real-world calendar night. The output can state how many ECLO accesses occur, in which weeks/date ranges, for which activities and affected lines. It cannot establish the number of distinct calendar days or the exact weekdays of ECLO. Do not label the row count as unique ECLO days, invent weekday dates, or treat a week's ending Sunday as the physical ECLO date. Exact calendar-night dispatch would need a separate scheduling stage and additional operational assumptions beyond this formulation.
+Official timing precision is weekly. Derive week start as `horizon_start + 7*(week-1)` days and week end as `horizon_start + (7*week-1)` days. The official `access_night` is local to contract/type/week; `access_night=2` does not mean Tuesday. Neither local night indices nor local group labels establish a shared real-world calendar night. The official output alone cannot establish distinct calendar days or exact ECLO weekdays. Exact calendar-night dispatch is supplied by the separate operational stage below and must never be reverse-engineered from the official labels.
 
 For example, the following illustrates an ECLO row's format only; it is not a complete schedule:
 
@@ -293,4 +295,38 @@ activity_id,access_seq,week,eclo,access_night
 A036,1,22,1,2
 ```
 
-This is one ECLO access for A036 in week 22 on its contract/type's local night 2. Its actual weekday is unspecified. The application should show the derived week date range next to the week number and allow filtering the access table to ECLO rows. These are output/data requirements; frontend implementation remains a separate workstream.
+This is one ECLO access for A036 in week 22 on its contract/type's local night 2. Its weekday remains unspecified until a validated operational calendarisation result supplies `service_date` separately.
+
+## Operational Enrichment Addendum
+
+The following formulation is required for NebulaX workflow runs but is not part of official PS1 scoring or the three CSV schemas.
+
+### Date assignment
+
+Let `D(w)` be the explicitly eligible Singapore service dates in week `w`, and let `a` identify a persistent access occurrence. Introduce binary `g_ad`, equal to one when access `a` is assigned to date `d`:
+
+\[
+\sum_{d\in D(w(a))}g_{ad}=1.
+\]
+
+All footprint rows for `a` use that date. If accesses share one location/week/group, their chosen dates are equal. Date-level capacity, protection, ECLO, workfront, precedence and explicit calendar restrictions remain hard. Frozen/manual pins set the relevant `g_ad=1`. If this subproblem is infeasible, return a conflict/no-good to weekly solving; do not publish a partial date map.
+
+### Recurrence
+
+Generate stable occurrences only from an explicit composite asset policy. For scheduled occurrence dates `r_k`, last verified completion `r_0` and maximum interval `q`:
+
+\[
+r_k-r_{k-1}\le q
+\]
+
+and enforce the horizon-end due boundary. Every generated occurrence carries a complete workload/footprint/contract template and is mandatory in operational mode. Early work cannot permit the next gap to exceed `q`. Generated IDs never enter an official submission.
+
+### Replanning and churn
+
+At `as_of`, freeze completed/occurred, in-progress and locked accesses, and credit their delivered yield. Add typed emergency/ad-hoc changes, then solve one selected scenario. First minimise its primary objective `O_s`; with `O_s=O_s*` by default, minimise churn `C`. `O_s` is official for an eligible competition run and PS1-derived/operational when it includes generated work. An approved non-negative score tolerance is explicit and reported, never hidden in a blended coefficient.
+
+`C` is computed over persistent future access IDs and decomposes changed week/date, absolute day displacement, ECLO flips and material sharing changes. New jobs have no baseline movement cost. Pure group-label symmetry and `access_seq` renumbering have zero churn.
+
+### Manual and explanation boundaries
+
+A drag/move is a pinned draft checked by the same independent validator. Publication repeats complete validation against current revisions; an infeasible repair preserves the prior plan. Explanations are deterministic fact packs derived from stored placements, diffs, binding rules and measured counterfactuals. A chatbot can verbalise and query those facts through role-scoped read-only tools, but cannot modify, validate or publish a schedule.

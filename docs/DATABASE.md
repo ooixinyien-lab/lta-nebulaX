@@ -33,6 +33,20 @@ The duplicate check and insert share the same write transaction, and unique inde
 
 New startup and upload imports store the original eight CSV byte strings in `instance_file_contents` inside SQLite. Their `instance_files.storage_key` is a logical `sqlite:<revision_id>/<filename>` reference, not a filesystem path. This removes cross-filesystem commit and orphan-file problems. Older filesystem storage keys and files are preserved, but new imports no longer use an upload directory.
 
+## Planned operational-enrichment persistence
+
+The workflow enrichments are not part of schema version 1 yet. Their persistence must extend, not mutate, the official instance boundary:
+
+- `enrichment_revisions` links an immutable calendar/recurrence/emergency revision to one official instance revision and records provenance/fingerprint;
+- calendar/global-night rows store Singapore service dates, eligibility/capacity, source and assumption flags;
+- recurrence policies store composite asset keys, `max_interval_days`, last verified completion, effective dates and a versioned job template; generated jobs use deterministic IDs and retain their source policy occurrence;
+- operational access rows add persistent access IDs, exact service dates, state/lock and source without adding columns to stored official CSV rows;
+- replans reference baseline/current revisions, `as_of`, frozen facts, typed changes, selected A/B/C policy, score tolerance and churn components;
+- manual-edit drafts and conflict reports are versioned separately from published plans; preflight is read-only, while save/repair revalidates inside an optimistic transaction; and
+- explanation fact packs record the referenced run/revision and deterministic evidence. Chat audit/retention stores provider/template/tool provenance with redaction and must not store credentials.
+
+Official export eligibility is explicit. Any run containing generated IDs or operational-only fields is ineligible for the official three-CSV endpoint. A failed calendarisation, recurrence check, repair or replan never replaces the last validated published plan.
+
 ## Baseline compatibility
 
 The compatibility baseline is `c156c5a368e0ee411f0b305dfa7987995d2f5492`. The layouts and behavior of legacy `connection(write=False)`, `snapshot()`, `bump()`, `audit()`, and `save_catalog()` are retained. Existing catalogs, request/allocation payloads, proposals, revisions, and audit records survive initialization. Official activities are stored separately and are never converted to legacy single-night requests.
@@ -50,6 +64,8 @@ python -m pytest backend/tests/test_data_layer.py backend/tests/test_ps1_databas
 ```
 
 Result: **45 passed** (21 official data-layer, 12 database, 12 startup/upload tests), with one third-party Starlette/AnyIO deprecation warning. Coverage includes entity counts, round trips, fresh/repeated startup, missing/invalid inputs, changed bundles, concurrent duplicate uploads/startups, rollback after partial writes, original SQLite layouts and stored-data preservation, repeated accesses, results, concurrent worker claims, optimistic plan conflicts, and legacy reset isolation.
+
+This result predates the planned enrichment tables and does not claim coverage for calendarisation, recurrence, churn, manual drafts or chatbot audit. Their acceptance tests are specified in [TEST_REPORT.md](TEST_REPORT.md).
 
 A separate differential check executed the exact baseline `database.py` from Git against the replacement: initial seeded snapshots, catalog updates, revision bumps, audit writes, and reset snapshots matched.
 

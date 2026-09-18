@@ -43,3 +43,21 @@ specification leaves the group-dependent buffer/closure compatibility predicate
 unresolved. The result therefore reports `safety_status="unverified"` and
 `official_checker_status="unavailable"`; it does not claim official validation
 parity.
+
+## Operational workflow boundary
+
+The active solver is weekly. Its `access_night` is a contract/activity-type/week
+local index, not a weekday. The required operational workflow will add typed
+modules under this package for:
+
+1. deterministic recurring station/sector job generation from explicit policies;
+2. exact `Asia/Singapore` `service_date` assignment by a calendarisation solver;
+3. emergency/dynamic replanning that freezes occurred/in-progress/locked work and
+   minimises the selected A/B/C objective before churn;
+4. backend validation and repair of pinned drag/move drafts; and
+5. deterministic explanation fact packs for a read-only, role-scoped chatbot.
+
+These fields and generated IDs never enter the official three CSVs. Competition,
+operational and replan runs must remain explicitly distinguishable. If an
+operational stage is infeasible, retain the last validated plan and return evidence
+instead of fabricating dates or dropping workload.

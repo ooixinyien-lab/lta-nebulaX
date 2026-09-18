@@ -6,6 +6,47 @@ import {
 import ScheduleDashboard from './ScheduleDashboard';
 import NetworkMapPage from './pages/NetworkMapPage';
 
+class ErrorBoundary extends React.Component {
+  constructor(props) {
+    super(props);
+    this.state = { hasError: false, error: null };
+  }
+
+  static getDerivedStateFromError(error) {
+    return { hasError: true, error };
+  }
+
+  componentDidCatch(error, errorInfo) {
+    console.error("ErrorBoundary caught error:", error, errorInfo);
+  }
+
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div className="min-h-screen bg-slate-950 text-rose-200 flex items-center justify-center p-6">
+          <div className="max-w-lg w-full bg-rose-950/30 border border-rose-800 rounded-2xl p-6 shadow-2xl space-y-4">
+            <h2 className="text-base font-bold text-rose-300">Rendering Error Caught</h2>
+            <pre className="text-xs font-mono bg-slate-950 border border-rose-900/60 p-3 rounded-lg overflow-x-auto text-rose-300 whitespace-pre-wrap">
+              {this.state.error?.toString()}
+            </pre>
+            <button
+              type="button"
+              onClick={() => {
+                this.setState({ hasError: false, error: null });
+                window.location.reload();
+              }}
+              className="px-4 py-2 bg-rose-600 hover:bg-rose-500 text-white rounded-lg text-xs font-bold transition"
+            >
+              Reload Interface
+            </button>
+          </div>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
+
 export default function App() {
   // Navigation & State
   const [activeTab, setActiveTab] = useState(() => {
@@ -92,7 +133,9 @@ export default function App() {
             </button>
           </div>
         </div>
-        <NetworkMapPage />
+        <ErrorBoundary>
+          <NetworkMapPage />
+        </ErrorBoundary>
       </div>
     );
   }

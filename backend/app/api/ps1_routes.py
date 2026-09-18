@@ -98,3 +98,47 @@ def run_results(run_id: str, request: Request, user: User = Depends(current_user
         occupancy = [decode(RunOccupancy, row) for row in session.execute("SELECT * FROM run_occupancies WHERE run_id=? ORDER BY week,location_id,activity_id", (run_id,))]
         contracts = [decode(RunContractResult, row) for row in session.execute("SELECT * FROM run_contract_results WHERE run_id=? ORDER BY contract_number", (run_id,))]
         return {"run_id": run.id, "revision_id": run.revision_id, "scenario": run.scenario, "status": run.status, "workload_complete": run.workload_complete, "accesses": [{"activity_id": x.activity_id, "access_seq": x.access_seq, "week": x.week, "eclo": x.eclo, "access_night": x.access_night} for x in accesses], "occupancy": [{"activity_id": x.activity_id, "week": x.week, "location_id": x.location_id, "co_share_group": x.co_share_group} for x in occupancy], "contract_results": [{"scenario": x.scenario, "contract_number": x.contract_number, "simulated_completion_date": x.simulated_completion_date.isoformat(), "overrun_days": x.overrun_days} for x in contracts]}
+
+
+def _chat_service(request: Request):
+    from backend.app.ps1.chat_service import ChatService
+    if not hasattr(request.app.state, "chat_service"):
+        request.app.state.chat_service = ChatService(request.app.state.settings)
+    return request.app.state.chat_service
+
+
+@router.get("/runs/{run_id}/explanations/{activity_id}")
+def get_activity_explanation(
+    run_id: str,
+    activity_id: str,
+    request: Request,
+    baseline_run_id: str | None = None,
+    user: User = Depends(current_user),
+):
+    service = _chat_service(request)
+    with _db(request).connection(write=True) as session:
+        return service.get_or_build_explanation(
+            session=session,
+            run_id=run_id,
+            activity_id=activity_id,
+            user=user,
+            baseline_run_id=baseline_run_id,
+        )
+
+
+@router.post("/chat")
+def post_chat(
+    request: Request,
+    payload: dict,
+    user: User = Depends(current_user),
+):
+    from backend.app.ps1.chat_models import ChatRequest
+    chat_req = ChatRequest.model_validate(payload)
+    service = _chat_service(request)
+    with _db(request).connection(write=True) as session:
+        return service.handle_chat_turn(
+            session=session,
+            payload=chat_req,
+            user=user,
+        )
+

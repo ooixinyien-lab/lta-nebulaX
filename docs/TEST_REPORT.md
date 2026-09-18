@@ -37,10 +37,11 @@ Operational checks do not turn an enriched run into an official submission. Any 
 Verification date: **19 September 2026**.
 
 ```sh
-python -m pytest backend/tests/test_data_layer.py backend/tests/test_ps1_scoring_validation.py backend/tests/test_ps1_solver.py -q
+python -m pytest backend/tests/test_data_layer.py backend/tests/test_ps1_scoring_validation.py backend/tests/test_ps1_solver.py backend/tests/test_ps1_database.py backend/tests/test_ps1_explanations.py backend/tests/test_ps1_chat_tools.py backend/tests/test_ps1_chat_api.py backend/tests/test_ps1_chat_security.py backend/tests/test_ps1_chat_fallback.py -q
 ```
 
-Result: **39 passed** (21 data/topology/I/O tests and 18 scoring/validation/solver tests). This establishes local adopted-rule coverage, not parity with the unavailable official checker. The five operational enrichments are planned and are not included in this result.
+Result: **78 passed** (21 data/topology/I/O tests, 18 scoring/validation/solver tests, 12 persistence tests, and 27 grounded chatbot & explanation tests). Additionally, `cd nebula-ui && npm test` passes 21/21 frontend tests and `npm run build` succeeds cleanly.
+
 
 ---
 

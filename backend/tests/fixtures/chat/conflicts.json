@@ -1,0 +1,12 @@
+[
+  {
+    "conflict_id": "cf-bet-17-01",
+    "run_id": "run-disrupted-002",
+    "activity_id": "A017",
+    "conflicting_activity_id": "A044",
+    "location_id": "SEC:BET:S15_S16",
+    "week": 17,
+    "rule_code": "LOCATION_CAPACITY",
+    "description": "Capacity bottleneck at SEC:BET:S15_S16 during week 17: A044 consumed the remaining possession capacity."
+  }
+]

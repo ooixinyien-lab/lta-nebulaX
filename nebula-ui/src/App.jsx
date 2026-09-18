@@ -5,8 +5,10 @@ import {
 } from 'lucide-react';
 import ScheduleDashboard from './ScheduleDashboard';
 import NetworkMapPage from './pages/NetworkMapPage';
+import { ScheduleChatProvider } from './chat/ScheduleChatContext';
+import ScheduleChatDock from './components/chatbot/ScheduleChatDock';
 
-export default function App() {
+function AppContent() {
   // Navigation & State
   const [activeTab, setActiveTab] = useState(() => {
     if (typeof window !== 'undefined' && window.location.pathname.includes('network-map')) {
@@ -278,6 +280,15 @@ export default function App() {
         <span>Validation Engine: <strong className="text-slate-300">IO_PY_PYDANTIC_PARSED</strong></span>
       </footer>
     </div>
+  );
+}
+
+export default function App() {
+  return (
+    <ScheduleChatProvider>
+      <AppContent />
+      <ScheduleChatDock />
+    </ScheduleChatProvider>
   );
 }
 

@@ -1,0 +1,2 @@
+# Isolated dependencies for the PS1 Grounded Schedule Chatbot
+google-genai>=1.0.0

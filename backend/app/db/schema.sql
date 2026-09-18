@@ -264,3 +264,59 @@ CREATE TABLE IF NOT EXISTS plan_occupancies (
 	PRIMARY KEY (plan_id, activity_id, week, location_id), 
 	FOREIGN KEY(plan_id) REFERENCES plans (id)
 );
+
+CREATE TABLE IF NOT EXISTS explanation_fact_packs (
+	id VARCHAR(64) NOT NULL, 
+	instance_id VARCHAR(64) NOT NULL, 
+	instance_revision_id VARCHAR(64) NOT NULL, 
+	run_id VARCHAR(64) NOT NULL, 
+	baseline_run_id VARCHAR(64), 
+	activity_id VARCHAR(64) NOT NULL, 
+	facts_json JSON NOT NULL, 
+	fallback_summary TEXT NOT NULL, 
+	evidence_hash VARCHAR(64) NOT NULL, 
+	builder_version VARCHAR(64) NOT NULL, 
+	created_at DATETIME NOT NULL, 
+	PRIMARY KEY (id), 
+	FOREIGN KEY(instance_id) REFERENCES instances (id), 
+	FOREIGN KEY(instance_revision_id) REFERENCES instance_revisions (id), 
+	FOREIGN KEY(run_id) REFERENCES solver_runs (id)
+);
+
+CREATE INDEX IF NOT EXISTS ix_explanation_fact_packs_lookup ON explanation_fact_packs (run_id, activity_id);
+
+CREATE TABLE IF NOT EXISTS chat_sessions (
+	id VARCHAR(64) NOT NULL, 
+	instance_id VARCHAR(64) NOT NULL, 
+	run_id VARCHAR(64) NOT NULL, 
+	baseline_run_id VARCHAR(64), 
+	created_by VARCHAR(255) NOT NULL, 
+	created_at DATETIME NOT NULL, 
+	last_activity_at DATETIME NOT NULL, 
+	PRIMARY KEY (id), 
+	FOREIGN KEY(instance_id) REFERENCES instances (id), 
+	FOREIGN KEY(run_id) REFERENCES solver_runs (id)
+);
+
+CREATE INDEX IF NOT EXISTS ix_chat_sessions_user ON chat_sessions (created_by, last_activity_at);
+
+CREATE TABLE IF NOT EXISTS chat_turns (
+	id VARCHAR(64) NOT NULL, 
+	session_id VARCHAR(64) NOT NULL, 
+	user_id VARCHAR(255) NOT NULL, 
+	question_redacted TEXT NOT NULL, 
+	answer_redacted TEXT NOT NULL, 
+	response_mode VARCHAR(32) NOT NULL, 
+	provider VARCHAR(64), 
+	model VARCHAR(64), 
+	prompt_template_version VARCHAR(64), 
+	fact_pack_id VARCHAR(64), 
+	tool_trace_json JSON, 
+	citation_json JSON, 
+	uncertainty_json JSON, 
+	created_at DATETIME NOT NULL, 
+	PRIMARY KEY (id), 
+	FOREIGN KEY(session_id) REFERENCES chat_sessions (id)
+);
+
+CREATE INDEX IF NOT EXISTS ix_chat_turns_session ON chat_turns (session_id, created_at);

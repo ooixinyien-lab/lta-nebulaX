@@ -5,12 +5,16 @@ import {
 } from 'lucide-react';
 import ScheduleDashboard from './ScheduleDashboard';
 import NetworkMapPage from './pages/NetworkMapPage';
+import CalendarPage from './pages/CalendarPage';
 
 export default function App() {
   // Navigation & State
   const [activeTab, setActiveTab] = useState(() => {
     if (typeof window !== 'undefined' && window.location.pathname.includes('network-map')) {
       return 'network_map';
+    }
+    if (typeof window !== 'undefined' && window.location.pathname.includes('calendar')) {
+      return 'calendar_preview';
     }
     return 'network_map';
   });
@@ -75,6 +79,10 @@ export default function App() {
 
   const displayData = parsedData || mockFallbackData;
 
+  if (activeTab === 'calendar_preview') {
+    return <CalendarPage onBack={() => setActiveTab('network_map')} />;
+  }
+
   if (activeTab === 'network_map') {
     return (
       <div className="min-h-screen bg-slate-900 text-slate-100 flex flex-col font-sans">
@@ -89,6 +97,13 @@ export default function App() {
               className="text-slate-400 hover:text-slate-200 transition flex items-center gap-1.5"
             >
               <Upload size={13} /> Data Ingestion &amp; Matrix Workspace
+            </button>
+            <span className="text-slate-600">|</span>
+            <button
+              onClick={() => setActiveTab('calendar_preview')}
+              className="text-slate-400 hover:text-slate-200 transition flex items-center gap-1.5"
+            >
+              <Calendar size={13} /> Actual Night Preview
             </button>
           </div>
         </div>
@@ -154,6 +169,12 @@ export default function App() {
             }`}
           >
             <Database size={16} /> Parsed Domain Classes
+          </button>
+          <button
+            onClick={() => setActiveTab('calendar_preview')}
+            className="flex items-center gap-2 py-1 px-3 rounded-md transition hover:bg-slate-800/50"
+          >
+            <Calendar size={16} /> Actual Night Preview
           </button>
         </div>
 

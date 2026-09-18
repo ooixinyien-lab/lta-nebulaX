@@ -5,12 +5,14 @@ and FootprintCache into rich presentation-ready models for the React Network Map
 """
 from __future__ import annotations
 
+from pathlib import Path
 from typing import Any
 
-from backend.app.config import Settings
+from backend.app.config import ROOT, Settings
 from backend.app.database import Database
 from backend.app.db.repositories.instances import load_revision
 from backend.app.domain_models import ProblemInstance
+from backend.app.io import load_problem_from_directory
 from backend.app.network_schedule import NetworkScheduleSource, get_schedule_source
 from backend.app.topology import FootprintCache
 
@@ -20,60 +22,101 @@ class NetworkMapService:
 
     def __init__(
         self,
-        database: Database,
+        database: Database | None = None,
         settings: Settings | None = None,
         schedule_source: NetworkScheduleSource | None = None,
         db_session_factory: Any = None,
+        db: Any = None,
     ) -> None:
-        self.database = database
+        self.database = database if database is not None else db
         self.settings = settings or Settings()
-        self.schedule_source = schedule_source or get_schedule_source(database)
+        self.schedule_source = schedule_source or get_schedule_source(self.database)
         self._problem: ProblemInstance | None = None
         self._footprint_cache: FootprintCache | None = None
         self._problem_revision_id: str | None = None
 
     def _latest_revision(self) -> tuple[str, int] | None:
-        with self.database.connection() as connection:
-            row = connection.execute(
-                """SELECT id,revision_number FROM instance_revisions
-                   WHERE validation_status='VALID'
-                   ORDER BY created_at DESC,revision_number DESC,id DESC LIMIT 1"""
-            ).fetchone()
-        if row is None:
+        if self.database is None:
             return None
-        return row["id"], row["revision_number"]
+        try:
+            with self.database.connection() as connection:
+                row = connection.execute(
+                    """SELECT id,revision_number FROM instance_revisions
+                       WHERE validation_status='VALID'
+                       ORDER BY created_at DESC,revision_number DESC,id DESC LIMIT 1"""
+                ).fetchone()
+            if row is None:
+                return None
+            return row["id"], row["revision_number"]
+        except Exception:
+            return None
 
     def _get_problem_and_cache(self) -> tuple[ProblemInstance, FootprintCache]:
         latest = self._latest_revision()
-        if latest is None:
+        if latest is not None and self.database is not None:
+            revision_id, _revision_number = latest
+            if self._problem_revision_id != revision_id or self._problem is None:
+                with self.database.connection() as connection:
+                    self._problem = load_revision(connection, revision_id)
+                self._footprint_cache = FootprintCache(self._problem)
+                self._problem_revision_id = revision_id
+            return self._problem, self._footprint_cache
+
+        # Fallback to loading directly from data directory if no database revision exists
+        if self._problem is None or self._footprint_cache is None:
+            data_dir = Path(self.settings.official_data_path)
+            if not data_dir.is_dir():
+                data_dir = ROOT / "data"
+            if data_dir.is_dir() and (data_dir / "01_LINES.csv").is_file():
+                self._problem = load_problem_from_directory(data_dir)
+                self._footprint_cache = FootprintCache(self._problem)
+                return self._problem, self._footprint_cache
             raise RuntimeError("No validated PS1 instance revision is available")
-        revision_id, _revision_number = latest
-        if self._problem_revision_id != revision_id or self._problem is None:
-            with self.database.connection() as connection:
-                self._problem = load_revision(connection, revision_id)
-            self._footprint_cache = FootprintCache(self._problem)
-            self._problem_revision_id = revision_id
         return self._problem, self._footprint_cache
 
     def get_context(self) -> dict[str, Any]:
         """Bootstrap information for the Network Map client."""
         scenarios = self.schedule_source.get_available_scenarios()
-        latest = self._latest_revision()
-        revision_id, revision_num = latest or ("default-rev", 1)
-        horizon_start = "2027-01-04"
-        horizon_weeks = 30
-        if latest is not None:
-            with self.database.connection() as connection:
-                params = dict(
-                    connection.execute(
-                        "SELECT key,value FROM instance_parameters WHERE revision_id=?",
-                        (revision_id,),
-                    )
-                )
-            horizon_start = params.get("horizon_start", horizon_start)
-            horizon_weeks = int(params.get("horizon_weeks", horizon_weeks))
+        revision_id = "default-rev"
+        revision_num = 1
+        problem, _cache = self._get_problem_and_cache()
+        horizon_start = problem.parameters.horizon_start.isoformat()
+        horizon_weeks = int(problem.parameters.horizon_weeks)
 
-        source_type = "sample_outputs" if any(s.source == "mock" for s in scenarios if s.available) else "solver"
+        latest = self._latest_revision()
+        if latest is not None and self.database is not None:
+            revision_id, revision_num = latest
+            try:
+                with self.database.connection() as connection:
+                    params = dict(
+                        connection.execute(
+                            "SELECT key,value FROM instance_parameters WHERE revision_id=?",
+                            (revision_id,),
+                        )
+                    )
+                horizon_start = params.get("horizon_start", horizon_start)
+                horizon_weeks = int(params.get("horizon_weeks", horizon_weeks))
+            except Exception:
+                pass
+
+        source_type = (
+            "solved_outputs"
+            if any(s.source == "solved" for s in scenarios if s.available)
+            else "sample_outputs"
+            if any(s.source == "mock" for s in scenarios if s.available)
+            else "solver"
+        )
+
+        weekly_summary = []
+        for w in range(1, horizon_weeks + 1):
+            accesses = self.schedule_source.get_accesses("A", week=w)
+            act_ids = sorted(set(a.activity_id for a in accesses))
+            weekly_summary.append({
+                "week": w,
+                "activeCount": len(act_ids),
+                "hasActivity": len(act_ids) > 0,
+            })
+
         return {
             "revision": {
                 "id": revision_id,
@@ -132,7 +175,6 @@ class NetworkMapService:
                     "bound": r.bound.value,
                     "supply_capacity": r.supply_capacity,
                 }
-                for r in problem.locations
                 for r in problem.locations
             ],
         }

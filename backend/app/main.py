@@ -1,12 +1,12 @@
 """One server serves both the API and the lightweight, no-build frontend."""
 from contextlib import asynccontextmanager
 import sqlite3
+import logging
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse, FileResponse
 from fastapi.staticfiles import StaticFiles
 from .config import Settings, ROOT
 from .database import Database
-from .db import create_engine_and_session, create_schema
 from .db.seed import seed_official_instance
 from .api.ps1_routes import router as ps1_router
 from .api.ps1_network_routes import router as ps1_network_router
@@ -25,24 +25,21 @@ except ModuleNotFoundError as exc:
     # removed or migrated separately.
     if exc.name != "backend.app.models":
         raise
+    logging.getLogger(__name__).warning("Legacy API unavailable: baseline backend.app.models is missing; PS1 routes remain available")
     router = None
 
 
 def create_app(settings: Settings | None = None):
     settings = settings or Settings()
     db = Database(settings.database_path, settings.dataset_path)
-    ps1_db = create_engine_and_session(settings.effective_database_url)
     @asynccontextmanager
     async def lifespan(app):
         db.initialize()
-        if settings.app_env != "production":
-            create_schema(ps1_db)
-        seed_official_instance(ps1_db, settings.official_data_path)
+        seed_official_instance(db, settings.official_data_path)
         yield
     app = FastAPI(title="NEBULA X Rail Scheduling Engine", version="0.2.0", lifespan=lifespan)
     app.state.settings = settings
     app.state.db = db
-    app.state.ps1_db = ps1_db
 
     @app.exception_handler(sqlite3.OperationalError)
     async def database_error(request: Request, exc):

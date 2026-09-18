@@ -11,9 +11,10 @@ router = APIRouter(prefix="/api/ps1/network", tags=["ps1-network-map"])
 
 def _get_service(request: Request) -> NetworkMapService:
     if not hasattr(request.app.state, "network_map_service"):
+        db = getattr(request.app.state, "db", getattr(request.app.state, "ps1_db", None))
         request.app.state.network_map_service = NetworkMapService(
-            db_session_factory=request.app.state.ps1_db,
-            settings=request.app.state.settings,
+            db=db,
+            settings=getattr(request.app.state, "settings", None),
         )
     return request.app.state.network_map_service
 

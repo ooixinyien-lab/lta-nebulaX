@@ -39,13 +39,21 @@ export default function NetworkToolbar({
             <span>Model Info</span>
           </button>
 
-          {isMockSource && (
+          {isMockSource ? (
             <div
               className="mock-badge flex items-center gap-1.5 text-[11px] bg-amber-950/60 text-amber-300 border border-amber-800/60 px-2 py-0.5 rounded-full font-medium"
               title="Schedule visualization currently uses sample_outputs because solver execution is not yet integrated."
             >
               <AlertTriangle size={12} className="text-amber-400" />
               <span>Mock Schedule Data</span>
+            </div>
+          ) : (
+            <div
+              className="solved-badge flex items-center gap-1.5 text-[11px] bg-emerald-950/60 text-emerald-300 border border-emerald-800/60 px-2 py-0.5 rounded-full font-medium"
+              title="Schedule visualization is reading solved outputs from the outputs/ directory."
+            >
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+              <span>Solved Outputs</span>
             </div>
           )}
         </div>

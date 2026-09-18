@@ -7,21 +7,7 @@ from __future__ import annotations
 
 from pathlib import Path
 from typing import Any
-from sqlalchemy import select
-from sqlalchemy.orm import Session
-
 from backend.app.config import ROOT, Settings
-from backend.app.db.models import (
-    ActivityRow,
-    ContractRow,
-    Instance,
-    InstanceRevision,
-    LineRow,
-    LocationRow,
-    ParameterRow,
-    SectorRow,
-    StationRow,
-)
 from backend.app.domain_models import ProblemInstance
 from backend.app.io import load_problem_from_directory
 from backend.app.network_schedule import NetworkScheduleSource, get_schedule_source
@@ -33,13 +19,14 @@ class NetworkMapService:
 
     def __init__(
         self,
-        db_session_factory: Any,
+        db: Any = None,
         settings: Settings | None = None,
         schedule_source: NetworkScheduleSource | None = None,
+        db_session_factory: Any = None,
     ) -> None:
-        self.db_session_factory = db_session_factory
+        self.db = db if db is not None else db_session_factory
         self.settings = settings or Settings()
-        self.schedule_source = schedule_source or get_schedule_source(db_session_factory)
+        self.schedule_source = schedule_source or get_schedule_source(self.db)
         self._problem: ProblemInstance | None = None
         self._footprint_cache: FootprintCache | None = None
 
@@ -55,28 +42,39 @@ class NetworkMapService:
     def get_context(self) -> dict[str, Any]:
         """Bootstrap information for the Network Map client."""
         scenarios = self.schedule_source.get_available_scenarios()
-        with self.db_session_factory.session() as session:
-            rev = session.scalar(
-                select(InstanceRevision)
-                .order_by(InstanceRevision.created_at.desc(), InstanceRevision.revision_number.desc())
-                .limit(1)
-            )
-            revision_id = rev.id if rev else "default-rev"
-            revision_num = rev.revision_number if rev else 1
+        revision_id = "default-rev"
+        revision_num = 1
+        problem, _ = self._get_problem_and_cache()
+        horizon_start = problem.parameters.horizon_start.isoformat()
+        horizon_weeks = int(problem.parameters.horizon_weeks)
 
-            horizon_start = "2027-01-04"
-            horizon_weeks = 30
-            if rev:
-                params = session.scalars(
-                    select(ParameterRow).where(ParameterRow.revision_id == rev.id)
-                ).all()
-                for p in params:
-                    if p.key == "horizon_start":
-                        horizon_start = p.value
-                    elif p.key == "horizon_weeks":
-                        horizon_weeks = int(p.value)
+        if self.db is not None and hasattr(self.db, "connection"):
+            try:
+                with self.db.connection() as con:
+                    row = con.execute(
+                        "SELECT id, revision_number FROM instance_revisions ORDER BY created_at DESC, revision_number DESC LIMIT 1"
+                    ).fetchone()
+                    if row:
+                        revision_id = row["id"]
+                        revision_num = row["revision_number"]
+                        param_rows = con.execute(
+                            "SELECT key, value FROM instance_parameters WHERE revision_id=?", (revision_id,)
+                        ).fetchall()
+                        for p in param_rows:
+                            if p["key"] == "horizon_start":
+                                horizon_start = p["value"]
+                            elif p["key"] == "horizon_weeks":
+                                horizon_weeks = int(p["value"])
+            except Exception:
+                pass
 
-        source_type = "sample_outputs" if any(s.source == "mock" for s in scenarios if s.available) else "solver"
+        source_type = (
+            "solved_outputs"
+            if any(s.source == "solved" for s in scenarios if s.available)
+            else "sample_outputs"
+            if any(s.source == "mock" for s in scenarios if s.available)
+            else "solver"
+        )
 
         weekly_summary = []
         for w in range(1, horizon_weeks + 1):
@@ -111,31 +109,11 @@ class NetworkMapService:
 
     def get_topology(self) -> dict[str, Any]:
         """Return logical network topology (lines, stations, sectors, locations)."""
-        with self.db_session_factory.session() as session:
-            rev = session.scalar(
-                select(InstanceRevision)
-                .order_by(InstanceRevision.created_at.desc(), InstanceRevision.revision_number.desc())
-                .limit(1)
-            )
-            rid = rev.id if rev else None
-
-            line_rows = session.scalars(
-                select(LineRow).where(LineRow.revision_id == rid) if rid else select(LineRow)
-            ).all()
-            stn_rows = session.scalars(
-                select(StationRow).where(StationRow.revision_id == rid).order_by(StationRow.seq) if rid else select(StationRow).order_by(StationRow.seq)
-            ).all()
-            sec_rows = session.scalars(
-                select(SectorRow).where(SectorRow.revision_id == rid).order_by(SectorRow.seq) if rid else select(SectorRow).order_by(SectorRow.seq)
-            ).all()
-            loc_rows = session.scalars(
-                select(LocationRow).where(LocationRow.revision_id == rid) if rid else select(LocationRow)
-            ).all()
-
+        problem, _ = self._get_problem_and_cache()
         return {
             "lines": [
                 {"line_code": r.line_code, "line_name": r.line_name}
-                for r in line_rows
+                for r in problem.lines
             ],
             "stations": [
                 {
@@ -144,7 +122,7 @@ class NetworkMapService:
                     "seq": r.seq,
                     "is_interchange": r.is_interchange,
                 }
-                for r in stn_rows
+                for r in problem.stations
             ],
             "sectors": [
                 {
@@ -155,17 +133,17 @@ class NetworkMapService:
                     "seq": r.seq,
                     "is_shared": r.is_shared,
                 }
-                for r in sec_rows
+                for r in problem.sectors
             ],
             "locations": [
                 {
                     "location_id": r.location_id,
-                    "location_kind": r.location_kind,
+                    "location_kind": r.location_kind.value,
                     "line_code": r.line_code,
-                    "bound": r.bound,
+                    "bound": r.bound.value,
                     "supply_capacity": r.supply_capacity,
                 }
-                for r in loc_rows
+                for r in problem.locations
             ],
         }
 

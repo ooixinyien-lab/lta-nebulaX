@@ -1,56 +1,44 @@
-from ortools.sat.python import cp_model
+"""One server serves both the API and the lightweight, no-build frontend."""
+from contextlib import asynccontextmanager
+import sqlite3
+from fastapi import FastAPI, Request
+from fastapi.responses import JSONResponse, FileResponse
+from fastapi.staticfiles import StaticFiles
+from .config import Settings, ROOT
+from .database import Database
+from .api.routes import router
 
-# Create the model
-model = cp_model.CpModel()
 
-# Engineering window: 1:00am - 4:30am
-# Represent time in minutes from 1:00am
-# 0 = 1:00am
-# 210 = 4:30am
+def create_app(settings: Settings | None = None):
+    settings = settings or Settings()
+    db = Database(settings.database_path, settings.dataset_path)
+    @asynccontextmanager
+    async def lifespan(app):
+        db.initialize()
+        yield
+    app = FastAPI(title="NebulaX scheduling API", version="0.2.0", lifespan=lifespan)
+    app.state.settings = settings
+    app.state.db = db
 
-# Job A: track inspection, 90 minutes
-start_A = model.new_int_var(0, 210 - 90, "start_A")
-end_A = start_A + 90
+    @app.exception_handler(sqlite3.OperationalError)
+    async def database_error(request: Request, exc):
+        return JSONResponse(status_code=503, content={"detail": "Database is busy or unavailable. Retry; no partial change was saved."})
 
-# Job B: rail grinding, 60 minutes
-start_B = model.new_int_var(0, 210 - 60, "start_B")
-end_B = start_B + 60
+    @app.middleware("http")
+    async def response_headers(request, call_next):
+        response = await call_next(request)
+        response.headers["X-Content-Type-Options"] = "nosniff"
+        response.headers["X-Frame-Options"] = "DENY"
+        response.headers["Referrer-Policy"] = "no-referrer"
+        if request.url.path.startswith("/api"):
+            response.headers["Cache-Control"] = "no-store"
+        return response
 
-# Create intervals
-job_A = model.new_interval_var(
-    start_A, 90, end_A, "job_A"
-)
+    app.include_router(router)
+    app.mount("/static", StaticFiles(directory=ROOT / "frontend"), name="static")
+    @app.get("/", include_in_schema=False)
+    def index():
+        return FileResponse(ROOT / "frontend" / "index.html")
+    return app
 
-job_B = model.new_interval_var(
-    start_B, 60, end_B, "job_B"
-)
-
-# A and B use the SAME track
-# Therefore they cannot happen at the same time
-model.add_no_overlap([job_A, job_B])
-
-# Create solver
-solver = cp_model.CpSolver()
-
-# Solve
-status = solver.solve(model)
-
-# Print result
-
-if status == cp_model.FEASIBLE or status == cp_model.OPTIMAL:
-    if status == cp_model.OPTIMAL:
-        status = "Optimal"
-
-    elif status == cp_model.FEASIBLE:
-        status = "Feasible"
-    print(status + " schedule found!")
-
-    print("Job A:")
-    print("  Start:", solver.value(start_A), "minutes after 1:00am")
-    print("  End:", solver.value(end_A), "minutes after 1:00am")
-
-    print("Job B:")
-    print("  Start:", solver.value(start_B), "minutes after 1:00am")
-    print("  End:", solver.value(end_B), "minutes after 1:00am")
-else:
-    print("No feasible schedule!")
+app = create_app()

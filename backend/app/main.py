@@ -11,6 +11,11 @@ from .db.seed import seed_official_instance
 from .api.ps1_routes import router as ps1_router
 
 try:
+    from .ps1.ps1_routes import router as ps1_ui_router
+except Exception:
+    ps1_ui_router = None
+
+try:
     from .api.routes import router
 except ModuleNotFoundError as exc:
     # The historical transition router depends on the retired synthetic
@@ -32,7 +37,7 @@ def create_app(settings: Settings | None = None):
             create_schema(ps1_db)
         seed_official_instance(ps1_db, settings.official_data_path)
         yield
-    app = FastAPI(title="NebulaX scheduling API", version="0.2.0", lifespan=lifespan)
+    app = FastAPI(title="NEBULA X Rail Scheduling Engine", version="0.2.0", lifespan=lifespan)
     app.state.settings = settings
     app.state.db = db
     app.state.ps1_db = ps1_db
@@ -54,6 +59,8 @@ def create_app(settings: Settings | None = None):
     if router is not None:
         app.include_router(router)
     app.include_router(ps1_router)
+    if ps1_ui_router is not None:
+        app.include_router(ps1_ui_router)
     app.mount("/static", StaticFiles(directory=ROOT / "frontend"), name="static")
     @app.get("/", include_in_schema=False)
     def index():

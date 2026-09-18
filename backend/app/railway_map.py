@@ -55,26 +55,29 @@ class NetworkMapService:
     def get_context(self) -> dict[str, Any]:
         """Bootstrap information for the Network Map client."""
         scenarios = self.schedule_source.get_available_scenarios()
-        with self.db_session_factory.session() as session:
-            rev = session.scalar(
-                select(InstanceRevision)
-                .order_by(InstanceRevision.created_at.desc(), InstanceRevision.revision_number.desc())
-                .limit(1)
-            )
-            revision_id = rev.id if rev else "default-rev"
-            revision_num = rev.revision_number if rev else 1
-
-            horizon_start = "2027-01-04"
-            horizon_weeks = 30
-            if rev:
-                params = session.scalars(
-                    select(ParameterRow).where(ParameterRow.revision_id == rev.id)
-                ).all()
-                for p in params:
-                    if p.key == "horizon_start":
-                        horizon_start = p.value
-                    elif p.key == "horizon_weeks":
-                        horizon_weeks = int(p.value)
+        problem, _ = self._get_problem_and_cache()
+        revision_id = "official-data"
+        revision_num = 1
+        horizon_start = problem.parameters.horizon_start.isoformat()
+        horizon_weeks = problem.parameters.horizon_weeks
+        if self.db_session_factory is not None:
+            with self.db_session_factory.session() as session:
+                rev = session.scalar(
+                    select(InstanceRevision)
+                    .order_by(InstanceRevision.created_at.desc(), InstanceRevision.revision_number.desc())
+                    .limit(1)
+                )
+                if rev:
+                    revision_id = rev.id
+                    revision_num = rev.revision_number
+                    params = session.scalars(
+                        select(ParameterRow).where(ParameterRow.revision_id == rev.id)
+                    ).all()
+                    for p in params:
+                        if p.key == "horizon_start":
+                            horizon_start = p.value
+                        elif p.key == "horizon_weeks":
+                            horizon_weeks = int(p.value)
 
         source_type = "sample_outputs" if any(s.source == "mock" for s in scenarios if s.available) else "solver"
         return {
@@ -99,26 +102,11 @@ class NetworkMapService:
 
     def get_topology(self) -> dict[str, Any]:
         """Return logical network topology (lines, stations, sectors, locations)."""
-        with self.db_session_factory.session() as session:
-            rev = session.scalar(
-                select(InstanceRevision)
-                .order_by(InstanceRevision.created_at.desc(), InstanceRevision.revision_number.desc())
-                .limit(1)
-            )
-            rid = rev.id if rev else None
-
-            line_rows = session.scalars(
-                select(LineRow).where(LineRow.revision_id == rid) if rid else select(LineRow)
-            ).all()
-            stn_rows = session.scalars(
-                select(StationRow).where(StationRow.revision_id == rid).order_by(StationRow.seq) if rid else select(StationRow).order_by(StationRow.seq)
-            ).all()
-            sec_rows = session.scalars(
-                select(SectorRow).where(SectorRow.revision_id == rid).order_by(SectorRow.seq) if rid else select(SectorRow).order_by(SectorRow.seq)
-            ).all()
-            loc_rows = session.scalars(
-                select(LocationRow).where(LocationRow.revision_id == rid) if rid else select(LocationRow)
-            ).all()
+        problem, _ = self._get_problem_and_cache()
+        line_rows = problem.lines
+        stn_rows = sorted(problem.stations, key=lambda row: (row.line_code, row.seq, row.station_id))
+        sec_rows = sorted(problem.sectors, key=lambda row: (row.line_code, row.seq, row.sector_id))
+        loc_rows = problem.locations
 
         return {
             "lines": [
@@ -148,9 +136,9 @@ class NetworkMapService:
             "locations": [
                 {
                     "location_id": r.location_id,
-                    "location_kind": r.location_kind,
+                    "location_kind": r.location_kind.value,
                     "line_code": r.line_code,
-                    "bound": r.bound,
+                    "bound": r.bound.value,
                     "supply_capacity": r.supply_capacity,
                 }
                 for r in loc_rows

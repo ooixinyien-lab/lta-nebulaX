@@ -18,7 +18,7 @@ def _parser() -> argparse.ArgumentParser:
     parser.add_argument("--scenario", choices=["A", "B", "C", "all"], default="all")
     parser.add_argument("--output-dir", type=Path, required=True)
     parser.add_argument("--calendar", type=Path, default=None, help="Optional operating calendar JSON file")
-    parser.add_argument("--time-limit", type=float, default=60.0)
+    parser.add_argument("--time-limit", type=float, default=600.0)
     parser.add_argument("--feasibility-time-limit", type=float, default=10.0)
     parser.add_argument("--workers", type=int, default=8)
     parser.add_argument("--seed", type=int, default=0)

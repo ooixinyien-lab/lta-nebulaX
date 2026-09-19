@@ -28,7 +28,7 @@ class SolveRequest(PS1Base):
     instance_id: str
     instance_revision_id: str | None = None
     scenario: str = Field(pattern="^[ABC]$")
-    time_limit_seconds: float = Field(default=60.0, ge=0.1, le=3600)
+    time_limit_seconds: float = Field(default=600.0, ge=0.1, le=3600)
     baseline_run_id: str | None = None
 
 

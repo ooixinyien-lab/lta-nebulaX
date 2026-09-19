@@ -170,7 +170,7 @@ class SolveMetrics(PS1Base):
 class PS1SolveOptions(PS1Base):
     """Bounded CP-SAT search options."""
 
-    time_limit_seconds: float = Field(default=60.0, gt=0)
+    time_limit_seconds: float = Field(default=600.0, gt=0)
     feasibility_time_limit_seconds: float = Field(default=10.0, gt=0)
     num_search_workers: int = Field(default=8, ge=1)
     random_seed: int = 0

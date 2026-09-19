@@ -13,7 +13,7 @@ problem = load_problem_from_directory("data")
 result = solve_ps1(
     problem,
     "A",
-    PS1SolveOptions(time_limit_seconds=60, feasibility_time_limit_seconds=10),
+    PS1SolveOptions(time_limit_seconds=600, feasibility_time_limit_seconds=10),
 )
 if result.has_incumbent:
     export_solve_result(result, "outputs/A")
@@ -26,7 +26,7 @@ python -m backend.app.ps1 \
   --data-dir data \
   --scenario all \
   --output-dir outputs \
-  --time-limit 60
+  --time-limit 600
 ```
 
 Each scenario directory contains exactly `SCHEDULE_ACCESS.csv`,

@@ -23,10 +23,21 @@ export function evaluateScheduleConflicts({
   locations = [],
   scenario = 'A',
   activeWeek = null,
+  isPs1Schedule = true,
 }) {
   const activityMap = new Map(activities.map(a => [a.activity_id, a]));
   const contractMap = new Map(contracts.map(c => [c.contract_number, c]));
   const locationMap = new Map(locations.map(l => [l.location_id, l]));
+
+  const getDay = (a) => {
+    if (a.day_of_week != null) return Number(a.day_of_week);
+    if (a.service_date) {
+      const [y, m, d] = String(a.service_date).split('-').map(Number);
+      const day = new Date(Date.UTC(y, m - 1, d)).getUTCDay();
+      return day === 0 ? 7 : day;
+    }
+    return a.access_night || 1;
+  };
 
   // Map: activity_id -> list of issues
   const activityConflicts = new Map();
@@ -45,15 +56,18 @@ export function evaluateScheduleConflicts({
   }
 
   // Filter accesses to activeWeek if provided, or full set
-  const evalAccesses = activeWeek ? accesses.filter(a => a.week === activeWeek) : accesses;
+  const evalAccesses = activeWeek !== null
+    ? accesses.filter(a => a.week === activeWeek)
+    : accesses;
   const evalOccupancies = activeWeek ? occupancies.filter(o => o.week === activeWeek) : occupancies;
 
-  // 1. Workfront Constraints: (contract_number, week, access_night) <= number_of_workfronts
-  const workfrontBuckets = new Map(); // key: `${contract}_${week}_${night}` -> [activity_ids]
+  // 1. Workfront Constraints: (contract_number, week, access_night / day) <= number_of_workfronts
+  const workfrontBuckets = new Map(); // key: `${contract}_${week}_${slot}` -> [activity_ids]
   for (const acc of evalAccesses) {
     const act = activityMap.get(acc.activity_id);
     const cNum = act?.contract_number || 'UNKNOWN';
-    const key = `${cNum}_${acc.week}_${acc.access_night}`;
+    const slot = isPs1Schedule ? acc.access_night : getDay(acc);
+    const key = `${cNum}_${acc.week}_${slot}`;
     if (!workfrontBuckets.has(key)) workfrontBuckets.set(key, []);
     workfrontBuckets.get(key).push(acc.activity_id);
   }
@@ -67,7 +81,7 @@ export function evaluateScheduleConflicts({
         addConflict(
           aid,
           'workfront',
-          `Workfront cap exceeded for ${cNum}: ${actIds.length}/${maxWf} active on Night N${nightStr} (Week ${weekStr})`,
+          `Workfront cap exceeded for ${cNum}: ${actIds.length}/${maxWf} active on ${isPs1Schedule ? `Access night ${nightStr}` : `Night N${nightStr}`} (Week ${weekStr})`,
           'error',
           { week: Number(weekStr), night: Number(nightStr), contract: cNum }
         );
@@ -75,19 +89,49 @@ export function evaluateScheduleConflicts({
     }
   }
 
-  // 2. Weekly Allocation Cap: access_night <= contract.number_of_maximum_access_per_week (Kc)
-  for (const acc of evalAccesses) {
-    const act = activityMap.get(acc.activity_id);
-    const contract = contractMap.get(act?.contract_number);
-    const maxNights = contract?.number_of_maximum_access_per_week ?? 7;
-    if (acc.access_night > maxNights) {
-      addConflict(
-        acc.activity_id,
-        'weekly_allocation',
-        `Night N${acc.access_night} exceeds max weekly allocation cap (${maxNights}) for ${act?.contract_number}`,
-        'error',
-        { week: acc.week, night: acc.access_night }
-      );
+  // 2. Weekly Allocation Cap:
+  if (isPs1Schedule) {
+    for (const acc of evalAccesses) {
+      const act = activityMap.get(acc.activity_id);
+      const contract = contractMap.get(act?.contract_number);
+      const maxNights = contract?.number_of_maximum_access_per_week ?? 7;
+      if (acc.access_night > maxNights) {
+        addConflict(
+          acc.activity_id,
+          'weekly_allocation',
+          `Access night ${acc.access_night} exceeds max weekly allocation cap (${maxNights}) for ${act?.contract_number}`,
+          'error',
+          { week: acc.week, night: acc.access_night }
+        );
+      }
+    }
+  } else {
+    // In operations mode: check that total weekly accesses do not exceed max weekly allocation
+    const weeklyCountByContract = new Map();
+    for (const acc of evalAccesses) {
+      const act = activityMap.get(acc.activity_id);
+      const cNum = act?.contract_number || 'UNKNOWN';
+      const key = `${cNum}_${acc.week}`;
+      weeklyCountByContract.set(key, (weeklyCountByContract.get(key) || 0) + 1);
+    }
+    for (const [key, count] of weeklyCountByContract.entries()) {
+      const [cNum, weekStr] = key.split('_');
+      const contract = contractMap.get(cNum);
+      const maxNights = contract?.number_of_maximum_access_per_week ?? 7;
+      if (count > maxNights) {
+        for (const acc of evalAccesses) {
+          const act = activityMap.get(acc.activity_id);
+          if ((act?.contract_number || 'UNKNOWN') === cNum && acc.week === Number(weekStr)) {
+            addConflict(
+              acc.activity_id,
+              'weekly_allocation',
+              `Total accesses (${count}) exceed weekly allocation cap (${maxNights}) for ${cNum} in Week ${weekStr}`,
+              'error',
+              { week: Number(weekStr), contract: cNum }
+            );
+          }
+        }
+      }
     }
   }
 
@@ -252,6 +296,7 @@ export function computeValidDropTargets({
   contracts = [],
   locations = [],
   scenario = 'A',
+  isPs1Schedule = true,
 }) {
   if (!draggingJob) return {};
 
@@ -264,18 +309,30 @@ export function computeValidDropTargets({
   const maxWorkfronts = contract?.number_of_workfronts ?? 2;
   const accessType = act?.access_type || draggingJob.access_type || 'PC';
 
+  const getDay = (a) => {
+    if (a.day_of_week != null) return Number(a.day_of_week);
+    if (a.service_date) {
+      const [y, m, d] = String(a.service_date).split('-').map(Number);
+      const day = new Date(Date.UTC(y, m - 1, d)).getUTCDay();
+      return day === 0 ? 7 : day;
+    }
+    return a.access_night || 1;
+  };
+
   // Other accesses in the active week (excluding the dragging job)
   const otherWeekAccesses = accesses.filter(
     a => a.week === activeWeek && a.activity_id !== draggingJob.activity_id
   );
 
-  // Pre-calculate workfront counts for this contract on each night N1..N7
+  // Pre-calculate workfront counts for this contract on each night/day N1..N7
   const workfrontCountsPerNight = {};
   for (let n = 1; n <= 7; n++) {
     workfrontCountsPerNight[n] = otherWeekAccesses.filter(
       a => {
         const otherAct = activityMap.get(a.activity_id);
-        return (otherAct?.contract_number || a.contract_number) === act?.contract_number && a.access_night === n;
+        const matchesContract = (otherAct?.contract_number || a.contract_number) === act?.contract_number;
+        const matchesSlot = isPs1Schedule ? a.access_night === n : getDay(a) === n;
+        return matchesContract && matchesSlot;
       }
     ).length;
   }
@@ -288,11 +345,11 @@ export function computeValidDropTargets({
     for (let night = 1; night <= 7; night++) {
       const cellKey = `${locId}_N${night}`;
 
-      // 1. Weekly allocation night cap (Kc)
-      if (night > maxNights) {
+      // 1. Weekly allocation night cap (Kc) in PS1 mode
+      if (isPs1Schedule && night > maxNights) {
         targets[cellKey] = {
           canDrop: false,
-          reason: `Night N${night} exceeds max allocation cap (${maxNights}) for ${act?.contract_number}`,
+          reason: `Access night ${night} exceeds max allocation cap (${maxNights}) for ${act?.contract_number}`,
         };
         continue;
       }
@@ -302,7 +359,7 @@ export function computeValidDropTargets({
       if (currentWf >= maxWorkfronts) {
         targets[cellKey] = {
           canDrop: false,
-          reason: `Workfront capacity full for ${act?.contract_number} on Night N${night} (${currentWf}/${maxWorkfronts})`,
+          reason: `Workfront capacity full for ${act?.contract_number} on ${isPs1Schedule ? `Access night ${night}` : `Night N${night}`} (${currentWf}/${maxWorkfronts})`,
         };
         continue;
       }
@@ -317,7 +374,7 @@ export function computeValidDropTargets({
       }
 
       // 4. Scenario A ECLO ban
-      if (scenario === 'A' && (night === 5 || night === 6) && draggingJob.eclo) {
+      if (scenario === 'A' && draggingJob.eclo) {
         targets[cellKey] = {
           canDrop: false,
           reason: 'Scenario A strictly forbids ECLO access',

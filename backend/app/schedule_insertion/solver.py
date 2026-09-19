@@ -670,7 +670,9 @@ def _calendarized_official_seed(
         for row in official.occupancy_rows
     }
     calendar_by_week: dict[int, list[OperationalCalendarDay]] = defaultdict(list)
+    calendar_day_by_date: dict[date, OperationalCalendarDay] = {}
     for day in baseline.calendar:
+        calendar_day_by_date[day.service_date] = day
         week = _week_for(baseline, day.service_date)
         if 1 <= week <= baseline.horizon_weeks and day.eligible and day.physical_available:
             calendar_by_week[week].append(day)
@@ -680,21 +682,38 @@ def _calendarized_official_seed(
     for visit in baseline.maintenance_visits:
         blocked_by_date[visit.service_date].update(maintenance_closure_locations(problem, visit.sector_id))
     used_by_date: dict[date, int] = defaultdict(int)
+    assigned_date_by_key = {
+        (a.activity_id, a.access_seq): a.service_date
+        for a in (official.calendar_assignments or [])
+    }
     accesses: list[ProjectAccess] = []
     for row in sorted(official.access_rows, key=lambda item: (item.week, item.activity_id, item.access_seq)):
         job = job_by_id.get(row.activity_id)
         if job is None:
             return None
         core = set(project_core_locations(job, problem))
-        selected_day = next(
-            (
-                day for day in calendar_by_week.get(row.week, [])
-                if (not row.eclo or day.eclo_eligible)
-                and not core & blocked_by_date.get(day.service_date, set())
-                and used_by_date[day.service_date] < day.gross_capacity
-            ),
-            None,
-        )
+        assigned_date = assigned_date_by_key.get((row.activity_id, row.access_seq))
+        selected_day = None
+        if assigned_date and assigned_date in calendar_day_by_date:
+            candidate = calendar_day_by_date[assigned_date]
+            if (
+                candidate.eligible
+                and candidate.physical_available
+                and (not row.eclo or candidate.eclo_eligible)
+                and not (core & blocked_by_date.get(candidate.service_date, set()))
+                and used_by_date[candidate.service_date] < candidate.gross_capacity
+            ):
+                selected_day = candidate
+        if selected_day is None:
+            selected_day = next(
+                (
+                    day for day in calendar_by_week.get(row.week, [])
+                    if (not row.eclo or day.eclo_eligible)
+                    and not core & blocked_by_date.get(day.service_date, set())
+                    and used_by_date[day.service_date] < day.gross_capacity
+                ),
+                None,
+            )
         if selected_day is None:
             return None
         used_by_date[selected_day.service_date] += 1

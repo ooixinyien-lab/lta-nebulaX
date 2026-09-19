@@ -15,7 +15,11 @@ from backend.app.schedule_insertion.models import (
     ScheduleScenario,
     SolveOptions,
 )
-from backend.app.schedule_insertion.solver import _official_jobs, solve_schedule_insertion
+from backend.app.schedule_insertion.solver import (
+    _calendarized_official_seed,
+    _official_jobs,
+    solve_schedule_insertion,
+)
 
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -155,3 +159,24 @@ def test_unknown_replan_retains_the_last_validated_baseline(monkeypatch: pytest.
     assert result.reference_candidate.projects == accepted.project_accesses
     assert result.reference_candidate.validation.passed
     assert result.configuration["engine_mode"] == "retained_validated_baseline"
+
+
+def test_calendarized_official_seed_balances_weekdays() -> None:
+    problem = load_problem_from_directory(ROOT / "data")
+    baseline = load_baseline_bundle(ROOT / "data" / "schedule_insertion").model_copy(update={"horizon_weeks": 30})
+    jobs = _official_jobs(problem)
+    request = ReplanRequest(
+        baseline_id=baseline.baseline_id,
+        baseline_revision=baseline.revision,
+        scenario=ScheduleScenario.A,
+        as_of=datetime(2027, 1, 1, tzinfo=timezone.utc),
+        options=SolveOptions(time_limit_seconds=10, num_search_workers=2, optimize=True),
+    )
+    seed = _calendarized_official_seed(problem, baseline, jobs, request, 5.0)
+    assert seed is not None
+    assert seed.validation.passed
+    weekdays = {access.service_date.isoweekday() for access in seed.projects}
+    # It must span all or most days of the week, never just Monday
+    assert len(weekdays) >= 5
+    assert weekdays.issuperset({1, 2, 3, 4, 5})
+

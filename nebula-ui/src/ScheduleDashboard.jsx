@@ -45,6 +45,17 @@ const NIGHTS_OF_WEEK = [
   { id: 7, label: 'Sunday', isEclo: false },
 ];
 
+function getActDay(a) {
+  if (a == null) return 1;
+  if (a.day_of_week != null) return Number(a.day_of_week);
+  if (a.service_date) {
+    const [y, m, d] = String(a.service_date).split('-').map(Number);
+    const day = new Date(Date.UTC(y, m - 1, d)).getUTCDay();
+    return day === 0 ? 7 : day;
+  }
+  return a.access_night || 1;
+}
+
 export default function ScheduleDashboard({
   displayData = {},
   mode,
@@ -136,8 +147,9 @@ export default function ScheduleDashboard({
       locations: locationsList,
       scenario: currentScenario,
       activeWeek,
+      isPs1Schedule,
     });
-  }, [accesses, occupancies, activities, contracts, locationsList, currentScenario, activeWeek]);
+  }, [accesses, occupancies, activities, contracts, locationsList, currentScenario, activeWeek, isPs1Schedule]);
   const conflictReport = useMemo(() => {
     if (!authoritativeConflicts.length) return preliminaryConflictReport;
     const activityConflicts = new Map();
@@ -163,8 +175,9 @@ export default function ScheduleDashboard({
       contracts,
       locations: filteredLocationsMemo(locationsList, sectorsList, activities, lineFilter, boundFilter),
       scenario: currentScenario,
+      isPs1Schedule,
     });
-  }, [draggingJob, activeWeek, accesses, occupancies, activities, contracts, locationsList, sectorsList, currentScenario, lineFilter, boundFilter]);
+  }, [draggingJob, activeWeek, accesses, occupancies, activities, contracts, locationsList, sectorsList, currentScenario, lineFilter, boundFilter, isPs1Schedule]);
 
   // Helper for filtered locations
   function filteredLocationsMemo(locs, secs, acts, lineF, boundF) {
@@ -226,6 +239,8 @@ export default function ScheduleDashboard({
         contract_number: 'MAINTENANCE',
         start_location: location,
         access_night: 1,
+        day_of_week: getActDay(visit),
+        service_date: visit.service_date,
         access_type: 'MAINT',
         isMaintenance: true,
         maintenance_visit: visit,
@@ -297,15 +312,30 @@ export default function ScheduleDashboard({
         accesses: JSON.parse(JSON.stringify(accesses)),
         occupancies: JSON.parse(JSON.stringify(occupancies)),
         jobId: draggingJob.activity_id,
-        fromNight: draggingJob.access_night,
+        fromNight: isPs1Schedule ? draggingJob.access_night : getActDay(draggingJob),
         toNight: targetNightId,
       }
     ]);
 
-    // Update accesses state: update access_night
+    // Update accesses state: update access_night or day_of_week / service_date
     const updatedAccesses = accesses.map(acc => {
       if (acc.activity_id === draggingJob.activity_id && acc.week === activeWeek) {
-        return { ...acc, access_night: targetNightId };
+        if (isPs1Schedule) {
+          return { ...acc, access_night: targetNightId };
+        }
+        const horizonStart = displayData?.horizon_start || scheduleData?.horizon_start;
+        let newDateStr = acc.service_date;
+        if (horizonStart) {
+          const [y, m, d] = String(horizonStart).split('-').map(Number);
+          const dt = new Date(Date.UTC(y, m - 1, d));
+          dt.setUTCDate(dt.getUTCDate() + (activeWeek - 1) * 7 + (targetNightId - 1));
+          newDateStr = dt.toISOString().split('T')[0];
+        }
+        return {
+          ...acc,
+          day_of_week: targetNightId,
+          service_date: newDateStr,
+        };
       }
       return acc;
     });
@@ -324,7 +354,10 @@ export default function ScheduleDashboard({
       occupancies: updatedOccupancies,
     }));
 
-    showToast(`✓ Moved ${draggingJob.activity_id} to Night N${targetNightId} at ${targetLocationId}`);
+    const nightName = isPs1Schedule
+      ? `Access night ${targetNightId}`
+      : (NIGHTS_OF_WEEK[targetNightId - 1]?.label || `Night N${targetNightId}`);
+    showToast(`✓ Moved ${draggingJob.activity_id} to ${nightName} at ${targetLocationId}`);
     setDraggingJob(null);
     setDragOverCell(null);
   };
@@ -440,7 +473,7 @@ export default function ScheduleDashboard({
                         Track Location / Sector ID
                       </th>
 
-                      {/* 7 Calendar Nights Columns (N1-N7) */}
+                      {/* Calendar Nights Columns (3 Access Nights or 7 Weekdays) */}
                       {visibleNights.map((night) => (
                         <th
                           key={night.id}
@@ -449,11 +482,11 @@ export default function ScheduleDashboard({
                           }`}
                         >
                           <div className="font-bold flex items-center justify-center gap-1">
-                            {night.label} (N{night.id})
+                            {isPs1Schedule ? night.label : `${night.label} (N${night.id})`}
                             {night.isEclo && <Zap size={12} className="text-amber-400 fill-amber-400" />}
                           </div>
                           <div className="text-[10px] text-slate-500 font-normal">
-                            Contract/type weekly index — not a weekday
+                            {isPs1Schedule ? 'Contract/type weekly index — not a weekday' : 'Operational service day'}
                           </div>
                         </th>
                       ))}
@@ -490,9 +523,13 @@ export default function ScheduleDashboard({
                           const cannotDropHere = isDraggingActive && !dropInfo?.canDrop;
                           const isDragOver = dragOverCell === cellKey;
 
-                          const matchingActs = weekActivities.filter(
-                            (a) => a.start_location === loc.sector_id && a.access_night === night.id
-                          );
+                          const matchingActs = weekActivities.filter((a) => {
+                            if (a.start_location !== loc.sector_id) return false;
+                            if (isPs1Schedule) {
+                              return a.access_night === night.id;
+                            }
+                            return getActDay(a) === night.id;
+                          });
 
                           // Group by co_share_group from SCHEDULE_OCCUPANCY.csv
                           const coShareGroups = {};
@@ -626,7 +663,13 @@ export default function ScheduleDashboard({
                 return (
                 <div key={contractNum} className="rounded-xl border border-slate-800 bg-slate-900 p-3 text-xs">
                   <div className="flex items-center justify-between"><strong className="text-slate-100">{contractNum}</strong><span className="text-cyan-300">{uniqueActs.length} activities</span></div>
-                  <div className="mt-2 flex flex-wrap gap-1">{uniqueActs.map((act) => <span key={act.activity_id} className="rounded bg-slate-950 px-2 py-1 text-slate-300">{act.activity_id} · N{act.access_night || '-'}</span>)}</div>
+                  <div className="mt-2 flex flex-wrap gap-1">
+                    {uniqueActs.map((act) => (
+                      <span key={act.activity_id} className="rounded bg-slate-950 px-2 py-1 text-slate-300">
+                        {act.activity_id} · {isPs1Schedule ? `N${act.access_night || '-'}` : (['Mon','Tue','Wed','Thu','Fri','Sat','Sun'][(getActDay(act) || 1) - 1] || `N${act.access_night || '-'}`)}
+                      </span>
+                    ))}
+                  </div>
                 </div>
                 );
               })}
@@ -683,8 +726,14 @@ export default function ScheduleDashboard({
                   <span className="text-slate-200 font-bold">Seq #{selectedActivity.access_seq || 1}</span>
                 </div>
                 <div className="flex justify-between">
-                  <span className="text-slate-400">Night Scheduled:</span>
-                  <span className="text-cyan-400 font-bold">Night N{selectedActivity.access_night}</span>
+                  <span className="text-slate-400">{isPs1Schedule ? 'Access Night:' : 'Scheduled Day:'}</span>
+                  <span className="text-cyan-400 font-bold">
+                    {isPs1Schedule
+                      ? `Night N${selectedActivity.access_night}`
+                      : (selectedActivity.service_date
+                          ? `${selectedActivity.service_date} (${['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday'][(getActDay(selectedActivity) || 1) - 1]})`
+                          : `Night N${selectedActivity.access_night}`)}
+                  </span>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-slate-400">Co-Share Group:</span>

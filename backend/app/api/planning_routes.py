@@ -79,6 +79,7 @@ def _operational_projection(connection, *, scenario: str, baseline_id: str, base
             "activity_id": access.job_id, "job_id": access.job_id, "access_id": access.access_id,
             "access_seq": access.access_seq, "week": access.week, "eclo": int(access.eclo),
             "access_night": access.access_night, "service_date": access.service_date.isoformat(),
+            "day_of_week": access.service_date.isoweekday(),
             "global_night_id": access.global_night_id, "locked": access.locked,
             "source": jobs[access.job_id].source.value if access.job_id in jobs else "official",
         })
@@ -114,6 +115,7 @@ def _operational_projection(connection, *, scenario: str, baseline_id: str, base
         if 1 <= week <= baseline.horizon_weeks:
             maintenance.append({
                 **visit.model_dump(mode="json"), "week": week,
+                "day_of_week": visit.service_date.isoweekday(),
                 "location_ids": sorted(maintenance_closure_locations(problem, visit.sector_id)),
             })
     validation = candidate.validation if candidate else validate_operational_schedule(

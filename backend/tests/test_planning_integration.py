@@ -108,6 +108,7 @@ def test_operational_revision_addition_maintenance_and_stale_guard(tmp_path: Pat
         assert payload["identity"]["mode"] == "operations"
         assert any(row["activity_id"] == "EM-IDENTITY" for row in payload["activities"])
         assert payload["maintenance"]
+        assert all(1 <= row["day_of_week"] <= 7 for row in payload["maintenance"])
         assert all(row["source"] != "recurring" for row in payload["accesses"])
         validation = client.get(f"/api/ps1/schedule-insertion/validate?baseline_id={baseline['baseline_id']}&baseline_revision=2&scenario=B", headers=HEADERS)
         assert validation.status_code == 200

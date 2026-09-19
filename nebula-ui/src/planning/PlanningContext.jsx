@@ -102,7 +102,7 @@ export function PlanningProvider({ children }) {
 
   const refresh = useCallback(async () => {
     if (!identity?.runId && state.mode === "requirements") { setSchedule(null); setConflicts([]); return; }
-    if ((!identity?.baselineId || !identity?.runId) && state.mode === "operations") { setSchedule(null); setConflicts([]); return; }
+    if ((!identity?.baselineId || (!identity?.runId && !identity?.accepted)) && state.mode === "operations") { setSchedule(null); setConflicts([]); return; }
     const controller = new AbortController();
     setLoading(true); setError(null);
     try {
@@ -193,7 +193,7 @@ export function PlanningProvider({ children }) {
   const accept = async () => {
     const response = await acceptOperationalSchedule(identity);
     setState((current) => ({ ...current, operations: Object.fromEntries(Object.entries(current.operations).map(([scenario, selected]) => [scenario,
-      selected?.baselineId === identity.baselineId ? { ...selected, baselineRevision: response.baseline.revision, runId: null } : selected])) }));
+      selected?.baselineId === identity.baselineId ? { ...selected, baselineRevision: response.baseline.revision, runId: null, accepted: true } : selected])) }));
     await refreshCatalog();
   };
 

@@ -32,7 +32,11 @@ export function reconcilePlanningState(current, catalog) {
       row.run_id === selected?.runId
       && row.revision_id === revision.revision_id
       && row.scenario === scenario
-      && row.status === "SUCCEEDED");
+      && row.status === "SUCCEEDED")
+      || officialRuns.find((row) =>
+        row.revision_id === revision.revision_id
+        && row.scenario === scenario
+        && row.status === "SUCCEEDED");
     return [scenario, {
       mode: "requirements", scenario,
       instanceId: revision.instance_id,
@@ -56,7 +60,12 @@ export function reconcilePlanningState(current, catalog) {
       && row.baseline_id === baseline.baseline_id
       && row.baseline_revision === baseline.baseline_revision
       && row.scenario === scenario
-      && row.status === "SUCCEEDED");
+      && row.status === "SUCCEEDED")
+      || operationalRuns.find((row) =>
+        row.baseline_id === baseline.baseline_id
+        && row.baseline_revision === baseline.baseline_revision
+        && row.scenario === scenario
+        && row.status === "SUCCEEDED");
     return [scenario, {
       mode: "operations", scenario,
       baselineId: baseline.baseline_id,

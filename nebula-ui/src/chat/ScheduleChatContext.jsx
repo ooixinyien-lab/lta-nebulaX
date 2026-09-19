@@ -4,10 +4,12 @@ import { sendChatMessage } from '../services/chatApi';
 const ScheduleChatContext = createContext(null);
 
 const DEFAULT_SCHEDULE_CONTEXT = {
-  instanceId: 'sample-instance',
-  runId: 'sample_run',
+  instanceId: null,
+  instanceRevisionId: null,
+  runId: null,
   baselineRunId: null,
   scenario: 'A',
+  mode: 'requirements',
   selectedActivityId: null,
   selectedLocationId: null,
   selectedWeek: null,
@@ -71,7 +73,10 @@ export function ScheduleChatProvider({ children, initialContext = {} }) {
       const data = await sendChatMessage({
         sessionId,
         instanceId: activeCtx.instanceId,
-        runId: activeCtx.runId || 'sample_run',
+        instanceRevisionId: activeCtx.instanceRevisionId,
+        runId: activeCtx.runId,
+        scenario: activeCtx.scenario,
+        mode: activeCtx.mode,
         baselineRunId: activeCtx.baselineRunId,
         question: trimmedQuestion,
         selectedActivityId: activeCtx.selectedActivityId,
@@ -161,7 +166,20 @@ export function ScheduleChatProvider({ children, initialContext = {} }) {
 export function useScheduleChat() {
   const context = useContext(ScheduleChatContext);
   if (!context) {
-    throw new Error('useScheduleChat must be used within a ScheduleChatProvider');
+    return {
+      scheduleContext: {},
+      setScheduleChatContext: () => {},
+      isOpen: false,
+      openScheduleChat: () => {},
+      closeScheduleChat: () => {},
+      toggleScheduleChat: () => {},
+      messages: [],
+      sendMessage: () => {},
+      clearMessages: () => {},
+      isLoading: false,
+      error: null,
+      sessionId: null,
+    };
   }
   return context;
 }

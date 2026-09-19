@@ -2,8 +2,9 @@ import React from 'react';
 import { Layers, Activity, Calendar, GitCompare } from 'lucide-react';
 
 export default function ChatContextBar({ context }) {
-  const { runId, baselineRunId, scenario, selectedActivityId, selectedWeek } = context || {};
-  const isMock = !runId || runId.startsWith('mock') || runId === 'sample_run' || runId === 'sample-run';
+  const { runId, baselineRunId, scenario, selectedActivityId, selectedLocationId, selectedWeek } = context || {};
+  const isMock = Boolean(runId && (runId.startsWith('mock') || runId === 'sample_run' || runId === 'sample-run'));
+  const isDatabase = Boolean(runId && !isMock);
 
   return (
     <div className="bg-slate-950/90 border-b border-slate-800/80 px-4 py-2 flex flex-wrap items-center gap-2 text-[11px] font-mono text-slate-300">
@@ -16,9 +17,15 @@ export default function ChatContextBar({ context }) {
 
       <div className="flex items-center gap-1 text-slate-300">
         <span className="text-slate-500">Run:</span>
-        <span className={isMock ? 'text-amber-400 font-semibold' : 'text-slate-200'}>
-          {isMock ? 'Sample schedule data (Mock)' : runId}
-        </span>
+        {isMock ? (
+          <span className="text-amber-400 font-semibold">Sample schedule data (Mock)</span>
+        ) : isDatabase ? (
+          <span className="text-emerald-400 font-semibold" title={runId}>
+            {runId.length > 20 ? `${runId.slice(0, 16)}...` : runId} (Database)
+          </span>
+        ) : (
+          <span className="text-slate-400 font-semibold">Active instance (Database)</span>
+        )}
       </div>
 
       {selectedActivityId && (
@@ -27,6 +34,15 @@ export default function ChatContextBar({ context }) {
           <div className="flex items-center gap-1 text-emerald-400 font-bold">
             <Activity size={12} />
             <span>Activity {selectedActivityId}</span>
+          </div>
+        </>
+      )}
+
+      {selectedLocationId && (
+        <>
+          <span className="text-slate-600">|</span>
+          <div className="flex items-center gap-1 text-cyan-300 font-bold">
+            <span>Loc: {selectedLocationId}</span>
           </div>
         </>
       )}

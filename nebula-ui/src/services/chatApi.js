@@ -5,7 +5,10 @@
 export async function sendChatMessage({
   sessionId,
   instanceId,
-  runId = 'sample_run',
+  instanceRevisionId,
+  runId = null,
+  scenario = 'A',
+  mode = 'requirements',
   baselineRunId,
   question,
   selectedActivityId,
@@ -15,7 +18,10 @@ export async function sendChatMessage({
   const payload = {
     session_id: sessionId || null,
     instance_id: instanceId || null,
-    run_id: runId,
+    instance_revision_id: instanceRevisionId || null,
+    run_id: runId || null,
+    scenario: scenario || 'A',
+    mode: mode || 'requirements',
     baseline_run_id: baselineRunId || null,
     question,
     selected_activity_id: selectedActivityId || null,

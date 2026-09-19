@@ -33,11 +33,14 @@ function PlanningApp() {
     if (planning.identity) {
       setScheduleChatContext({
         runId: planning.identity.runId || null,
-        instanceId: planning.identity.instanceId || 'sample-instance',
+        instanceId: planning.identity.instanceId || null,
+        instanceRevisionId: planning.identity.instanceRevisionId || null,
+        mode: planning.mode || 'requirements',
         scenario: planning.scenario || 'A',
+        selectedWeek: dashboardWeek,
       });
     }
-  }, [planning.identity, planning.scenario, setScheduleChatContext]);
+  }, [planning.identity, planning.mode, planning.scenario, dashboardWeek, setScheduleChatContext]);
 
   const handleFiles = (event) => {
     const next = { ...files };

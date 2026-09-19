@@ -5,6 +5,7 @@ import {
   Sparkles, RotateCcw, AlertOctagon, CheckCircle, Move, Check
 } from 'lucide-react';
 import { evaluateScheduleConflicts, computeValidDropTargets } from './services/conflictChecker';
+import { useScheduleChat } from './chat/ScheduleChatContext';
 
 // Access Type Semantic Styling
 const ACCESS_TYPE_STYLES = {
@@ -68,6 +69,7 @@ export default function ScheduleDashboard({
   onExport,
 }) {
   const [currentScenario, setCurrentScenario] = useState(initialScenario);
+  const { setScheduleChatContext, openScheduleChat } = useScheduleChat();
 
   useEffect(() => {
     setCurrentScenario(initialScenario);
@@ -79,12 +81,22 @@ export default function ScheduleDashboard({
     const next = typeof value === 'function' ? value(activeWeek) : value;
     if (onWeekChange) onWeekChange(next);
     else setInternalWeek(next);
+    setScheduleChatContext({ selectedWeek: next });
   };
   const [lineFilter, setLineFilter] = useState('ALL');
   const [boundFilter, setBoundFilter] = useState('BOTH');
   const [showBuffers, setShowBuffers] = useState(true);
   const [showRoutineMaintenance, setShowRoutineMaintenance] = useState(true);
   const [selectedActivity, setSelectedActivity] = useState(null);
+
+  const handleSelectActivity = (act) => {
+    setSelectedActivity(act);
+    setScheduleChatContext({
+      selectedActivityId: act?.activity_id || null,
+      selectedLocationId: act?.start_location || null,
+      selectedWeek: activeWeek,
+    });
+  };
 
   // Full Schedule State & Solver Baseline
   const [scheduleData, setScheduleData] = useState(null);
@@ -597,7 +609,7 @@ export default function ScheduleDashboard({
                                         draggable={!act.isMaintenance}
                                         onDragStart={(e) => !act.isMaintenance && handleDragStart(e, act)}
                                         onDragEnd={handleDragEnd}
-                                        onClick={() => setSelectedActivity(act)}
+                                        onClick={() => handleSelectActivity(act)}
                                         className={`w-full text-left p-1.5 rounded-md border transition-all cursor-grab active:cursor-grabbing transform hover:scale-[1.02] ${
                                           isBeingDragged ? 'opacity-30 scale-95 border-dashed border-cyan-400' : ''
                                         } ${
@@ -688,7 +700,10 @@ export default function ScheduleDashboard({
                   <span className="text-xs text-slate-400">Possession &amp; Conflict Inspector</span>
                 </div>
                 <button
-                  onClick={() => setSelectedActivity(null)}
+                  onClick={() => {
+                    setSelectedActivity(null);
+                    setScheduleChatContext({ selectedActivityId: null });
+                  }}
                   className="text-slate-400 hover:text-white p-1 rounded-md"
                 >
                   <X size={18} />
@@ -752,12 +767,26 @@ export default function ScheduleDashboard({
               </div>
             </div>
 
-            <button
-              onClick={() => setSelectedActivity(null)}
-              className="mt-6 w-full bg-slate-900 hover:bg-slate-800 border border-slate-700 text-slate-200 text-xs font-bold py-2.5 rounded-xl transition"
-            >
-              Close Inspector
-            </button>
+            <div className="space-y-2 mt-6">
+              <button
+                type="button"
+                onClick={() => openScheduleChat({ activityId: selectedActivity.activity_id })}
+                className="w-full flex items-center justify-center gap-2 bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 text-white text-xs font-bold py-2.5 rounded-xl shadow-lg transition"
+              >
+                <Sparkles size={14} />
+                <span>Ask AI About This Activity</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setSelectedActivity(null);
+                  setScheduleChatContext({ selectedActivityId: null });
+                }}
+                className="w-full bg-slate-900 hover:bg-slate-800 border border-slate-700 text-slate-200 text-xs font-bold py-2.5 rounded-xl transition"
+              >
+                Close Inspector
+              </button>
+            </div>
           </div>
         )}
       </main>

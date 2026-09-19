@@ -282,10 +282,11 @@ class ScheduleReadTools:
         score = self.source.get_score(scope.run_id)
         if not score:
             return {"score": None, "available": False, "message": "Score data unavailable."}, []
+        components = score.get("components") or {}
         total = float(score.get("total_score", 0.0))
-        p = float(score.get("penalty_p", 0.0))
-        v = int(score.get("excess_v", 0))
-        e = int(score.get("eclo_e", 0))
+        p = float(score.get("penalty_p", components.get("weighted_lateness_P", 0.0)))
+        v = int(score.get("excess_v", components.get("excess_supply_V", 0)))
+        e = int(score.get("eclo_e", components.get("eclo_count_E", 0)))
         return {
             "score": score,
             "total_score": total,

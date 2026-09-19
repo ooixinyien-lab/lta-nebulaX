@@ -175,4 +175,31 @@ describe("ScheduleChatDock Component (Portability & UX)", () => {
       expect(screen.getByText("Why was A059 moved?")).toBeDefined();
     });
   });
+
+  it("displays database run and location badges in ChatContextBar", () => {
+    render(
+      <ScheduleChatProvider
+        initialContext={{
+          scenario: "B",
+          runId: "run-d143716fa99e489892ad53c1f79244fd",
+          selectedActivityId: "A001",
+          selectedLocationId: "SEC:BET:S15_S16",
+          selectedWeek: 12,
+        }}
+      >
+        <ScheduleChatDock />
+      </ScheduleChatProvider>
+    );
+
+    const launcherBtn = screen.getByRole("button", { name: /explain this schedule/i });
+    fireEvent.click(launcherBtn);
+
+    expect(screen.getByRole("dialog", { name: /schedule explainer/i })).toBeDefined();
+    expect(screen.getByText(/Scenario B/i)).toBeDefined();
+    expect(screen.getByText(/run-d143.*\(Database\)/i)).toBeDefined();
+    expect(screen.getByText(/Activity A001/i)).toBeDefined();
+    expect(screen.getByText(/Loc: SEC:BET:S15_S16/i)).toBeDefined();
+    expect(screen.getAllByText(/Week 12/i).length).toBeGreaterThan(0);
+    expect(screen.queryByText(/Sample schedule data \(Mock\)/i)).toBeNull();
+  });
 });

@@ -128,8 +128,11 @@ class ChatService:
         )
         fact_pack = builder.build_fact_pack(scope_model, activity_id)
 
-        # 5. Persist immutable fact pack if non-mock
-        if not scope.is_mock:
+        # 5. Persist immutable fact pack if non-mock and run_id is a valid solver_runs FK.
+        # Operational runs (prefix "sir-") and empty run_ids do NOT exist in solver_runs,
+        # so persisting with those would violate the FOREIGN KEY constraint.
+        _can_persist = not scope.is_mock and bool(scope.run_id) and scope.run_id.startswith("run-")
+        if _can_persist:
             save_fact_pack(
                 session,
                 ExplanationFactPackRow(
@@ -184,11 +187,13 @@ class ChatService:
 
         # 1. Authorize scope
         scope = build_chat_scope(
-            session,
-            payload.run_id,
-            user,
-            payload.baseline_run_id,
-            payload.instance_id,
+            session=session,
+            run_id=payload.run_id,
+            user=user,
+            baseline_run_id=payload.baseline_run_id,
+            instance_id=payload.instance_id,
+            scenario=payload.scenario or "A",
+            instance_revision_id=payload.instance_revision_id,
         )
 
         # 2. Validate activity if provided
@@ -211,9 +216,18 @@ class ChatService:
 
         # 4. Session resolution
         session_id = payload.session_id or f"chat-{uuid4().hex[:12]}"
+        # Only persist if run_id is a valid solver_runs FK.
+        # Operational runs (prefix "sir-") and empty/unresolved run_ids live in
+        # different tables and must NOT be stored in chat_sessions or explanation_fact_packs.
+        _can_persist_session = (
+            not scope.is_mock
+            and bool(scope.run_id)
+            and scope.run_id.startswith("run-")
+        )
+
         existing_session = get_chat_session(session, session_id)
         if existing_session is None:
-            if not scope.is_mock:
+            if _can_persist_session:
                 create_chat_session(
                     session,
                     session_id=session_id,
@@ -252,7 +266,7 @@ class ChatService:
         q_redacted = redact_text(payload.question, self.settings.chat_log_mode)
         a_redacted = redact_text(answer, self.settings.chat_log_mode)
 
-        if not scope.is_mock:
+        if _can_persist_session:
             turn_row = ChatTurnRow(
                 id=f"turn-{uuid4().hex[:12]}",
                 session_id=session_id,

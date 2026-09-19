@@ -3,6 +3,7 @@ import { useNetworkTopology } from "../../hooks/useNetworkTopology";
 import { useNetworkOccupancy } from "../../hooks/useNetworkOccupancy";
 import { useWeeklyPlayback } from "../../hooks/useWeeklyPlayback";
 import { DEFAULT_LAYERS } from "../../network/mapConstants";
+import { useScheduleChat } from "../../chat/ScheduleChatContext";
 
 import NetworkToolbar from "./NetworkToolbar";
 import WeekStatusBar from "./WeekStatusBar";
@@ -88,12 +89,15 @@ export default function NetworkMapWorkspace({
     horizonWeeks
   );
 
+  const { setScheduleChatContext } = useScheduleChat();
+
   const toggleLayer = (layerKey) => {
     setLayers((prev) => ({ ...prev, [layerKey]: !prev[layerKey] }));
   };
 
   const handleSelectActivity = (actId) => {
     setSelectedActivityId(actId);
+    setScheduleChatContext({ selectedActivityId: actId || null });
     if (actId) {
       setSelectedEntity({ type: "activity", id: actId });
     } else if (selectedEntity?.type === "activity") {
@@ -103,6 +107,7 @@ export default function NetworkMapWorkspace({
 
   const handleCloseInspector = () => {
     setSelectedEntity(null);
+    setScheduleChatContext({ selectedActivityId: null, selectedLocationId: null });
   };
 
   const handleSelectEntity = (entity) => {
@@ -113,8 +118,12 @@ export default function NetworkMapWorkspace({
       selectedEntity.id === entity.id
     ) {
       setSelectedEntity(null);
+      setScheduleChatContext({ selectedLocationId: null });
     } else {
       setSelectedEntity(entity);
+      if (entity?.type === "station" || entity?.type === "sector") {
+        setScheduleChatContext({ selectedLocationId: entity.id });
+      }
     }
   };
 

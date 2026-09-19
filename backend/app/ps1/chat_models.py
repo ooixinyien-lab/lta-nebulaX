@@ -101,7 +101,10 @@ class ProvenanceModel(PS1Base):
 class ChatRequest(PS1Base):
     session_id: str | None = None
     instance_id: str | None = None
-    run_id: str
+    instance_revision_id: str | None = None
+    run_id: str | None = None
+    scenario: str | None = Field(default="A", pattern="^[ABC]$")
+    mode: str | None = Field(default="requirements")
     baseline_run_id: str | None = None
     question: str
     selected_activity_id: str | None = None

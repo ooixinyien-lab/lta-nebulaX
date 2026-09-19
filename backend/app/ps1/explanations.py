@@ -84,6 +84,11 @@ class PersistedRunExplanationSource(ExplanationScheduleSource):
             "SELECT * FROM instance_activities WHERE revision_id=? AND activity_id=?",
             (self.revision_id, activity_id),
         ).fetchone()
+        if not row:
+            row = self.session.execute(
+                "SELECT * FROM instance_activities WHERE activity_id=? ORDER BY revision_id DESC LIMIT 1",
+                (activity_id,),
+            ).fetchone()
         act = decode(ActivityRow, row)
         if act is None:
             return None
@@ -98,6 +103,33 @@ class PersistedRunExplanationSource(ExplanationScheduleSource):
         )
 
     def get_placements(self, run_id: str, activity_id: str) -> list[PlacementItem]:
+        if not run_id:
+            return []
+        # Support operational candidate runs
+        if run_id.startswith("sir-") or run_id.startswith("op-run-"):
+            try:
+                from backend.app.schedule_insertion.persistence import load_run
+                result = load_run(self.session, run_id)
+                if result:
+                    candidate = result.lower_disruption_candidate or result.reference_candidate
+                    if candidate:
+                        items = []
+                        for acc in candidate.projects:
+                            if acc.job_id == activity_id:
+                                items.append(
+                                    PlacementItem(
+                                        access_seq=acc.access_seq,
+                                        week=acc.week,
+                                        eclo=acc.eclo,
+                                        access_night=acc.access_night,
+                                        locations=sorted(acc.group_by_location.keys()),
+                                        co_share_group=list(acc.group_by_location.values())[0] if acc.group_by_location else None,
+                                    )
+                                )
+                        return sorted(items, key=lambda x: x.access_seq)
+            except Exception:
+                pass
+
         access_rows = self.session.execute(
             "SELECT * FROM run_accesses WHERE run_id=? AND activity_id=? ORDER BY access_seq",
             (run_id, activity_id),
@@ -132,6 +164,8 @@ class PersistedRunExplanationSource(ExplanationScheduleSource):
         return items
 
     def get_contract_result(self, run_id: str, contract_number: str) -> dict[str, Any] | None:
+        if not run_id:
+            return None
         row = self.session.execute(
             "SELECT * FROM run_contract_results WHERE run_id=? AND contract_number=?",
             (run_id, contract_number),
@@ -147,20 +181,103 @@ class PersistedRunExplanationSource(ExplanationScheduleSource):
         }
 
     def get_score(self, run_id: str) -> dict[str, Any] | None:
+        if not run_id:
+            return None
+        # Support operational candidate runs
+        if run_id.startswith("sir-") or run_id.startswith("op-run-"):
+            try:
+                from backend.app.schedule_insertion.persistence import load_run
+                result = load_run(self.session, run_id)
+                if result:
+                    candidate = result.lower_disruption_candidate or result.reference_candidate
+                    if candidate and candidate.cost:
+                        return {
+                            "total_score": candidate.cost.objective_points,
+                            "penalty_p": candidate.cost.lateness_points,
+                            "excess_v": candidate.cost.excess_supply_slots,
+                            "eclo_e": candidate.cost.eclo_accesses,
+                            "components": {
+                                "weighted_lateness_P": candidate.cost.lateness_points,
+                                "excess_supply_V": candidate.cost.excess_supply_slots,
+                                "eclo_count_E": candidate.cost.eclo_accesses,
+                            },
+                        }
+            except Exception:
+                pass
+
         row = self.session.execute("SELECT * FROM solver_runs WHERE id=?", (run_id,)).fetchone()
         run = decode(SolverRun, row)
         if run is None or run.incumbent_score is None:
             return None
-        report_row = self.session.execute("SELECT * FROM run_validation_reports WHERE run_id=?", (run_id,)).fetchone()
-        report = decode(RunValidationReport, report_row)
-        components = report.score_components if report else None
-        return {
-            "total_score": run.incumbent_score,
-            "components": components or {},
-        }
+
+        # Reconstruct detailed official score breakdown from SQLite data
+        try:
+            from backend.app.db.repositories.instances import load_revision
+            from backend.app.ps1.scoring import compute_score_breakdown
+            from backend.app.domain_models import AccessScheduleRow, OccupancyScheduleRow
+            problem = load_revision(self.session, run.revision_id)
+            acc_rows = [
+                AccessScheduleRow(
+                    activity_id=r["activity_id"],
+                    access_seq=r["access_seq"],
+                    week=r["week"],
+                    eclo=r["eclo"],
+                    access_night=r["access_night"],
+                )
+                for r in self.session.execute(
+                    "SELECT activity_id, access_seq, week, eclo, access_night FROM run_accesses WHERE run_id=?",
+                    (run_id,),
+                ).fetchall()
+            ]
+            occ_rows = [
+                OccupancyScheduleRow(
+                    activity_id=r["activity_id"],
+                    week=r["week"],
+                    location_id=r["location_id"],
+                    co_share_group=r["co_share_group"],
+                )
+                for r in self.session.execute(
+                    "SELECT activity_id, week, location_id, co_share_group FROM run_occupancies WHERE run_id=?",
+                    (run_id,),
+                ).fetchall()
+            ]
+            breakdown = compute_score_breakdown(problem, run.scenario, acc_rows, occ_rows)
+            return {
+                "total_score": run.incumbent_score,
+                "penalty_p": breakdown.weighted_activity_lateness,
+                "excess_v": breakdown.excess_slots,
+                "eclo_e": breakdown.eclo_accesses,
+                "components": {
+                    "weighted_lateness_P": breakdown.weighted_activity_lateness,
+                    "excess_supply_V": breakdown.excess_slots,
+                    "eclo_count_E": breakdown.eclo_accesses,
+                },
+            }
+        except Exception:
+            report_row = self.session.execute("SELECT * FROM run_validation_reports WHERE run_id=?", (run_id,)).fetchone()
+            report = decode(RunValidationReport, report_row)
+            components = report.score_components if report else None
+            return {
+                "total_score": run.incumbent_score,
+                "components": components or {},
+            }
 
     def get_conflicts(self, run_id: str, activity_id: str | None = None) -> list[dict[str, Any]]:
-        # Stored conflict records if populated by replan / validation
+        if not run_id:
+            return []
+        if run_id.startswith("sir-") or run_id.startswith("op-run-"):
+            try:
+                from backend.app.schedule_insertion.persistence import load_run
+                result = load_run(self.session, run_id)
+                if result:
+                    candidate = result.lower_disruption_candidate or result.reference_candidate
+                    if candidate and candidate.validation:
+                        findings = [f.model_dump(mode="json") for f in candidate.validation.findings]
+                        if activity_id:
+                            return [f for f in findings if f.get("activity_id") == activity_id or f.get("job_id") == activity_id]
+                        return findings
+            except Exception:
+                pass
         return []
 
     def get_counterfactuals(self, activity_id: str) -> list[dict[str, Any]]:
@@ -171,6 +288,8 @@ class PersistedRunExplanationSource(ExplanationScheduleSource):
         return False, None
 
     def get_location_week_status(self, run_id: str, location_id: str, week: int) -> list[dict[str, Any]]:
+        if not run_id:
+            return []
         rows = self.session.execute(
             "SELECT activity_id, co_share_group FROM run_occupancies WHERE run_id=? AND location_id=? AND week=?",
             (run_id, location_id, week),

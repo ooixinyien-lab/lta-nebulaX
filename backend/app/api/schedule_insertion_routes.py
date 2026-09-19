@@ -132,6 +132,9 @@ def solve(payload: SolveRequest, request: Request, user: User = Depends(current_
         baseline = load_baseline(session, payload.request.baseline_id, payload.request.baseline_revision)
     if baseline is None:
         raise HTTPException(409, "Baseline revision is stale or missing")
+    invalid_jobs = [job.job_id for job in baseline.project_jobs if len(str(job.start_location_id).split(":", 2)) < 2]
+    if invalid_jobs:
+        raise HTTPException(422, {"message": "Operational jobs must use a qualified location id such as SEC:ALP:S01_S02:EB or PLAT:ALP:S01:EB.", "job_ids": invalid_jobs})
     result = solve_schedule_insertion(problem, baseline, payload.request, config=ScheduleInsertionConfig(horizon_weeks=baseline.horizon_weeks))
     with _db(request).connection(write=True) as session:
         run_id = save_run(session, result, actor=user.id, official_revision_id=official_revision_id)

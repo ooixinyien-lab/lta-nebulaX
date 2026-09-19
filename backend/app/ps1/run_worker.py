@@ -51,7 +51,7 @@ def execute_official_run(database: Database, run_id: str) -> None:
                 )
                 connection.execute(
                     "UPDATE solver_runs SET solver_version=?,validator_version=? WHERE id=?",
-                    ("ps1-cp-sat-v1", result.validation.provenance, run_id),
+                    ("ps1-cp-sat-v1", result.validation.local_validator_version, run_id),
                 )
                 finish_run(connection, run_id, status="SUCCEEDED")
             else:

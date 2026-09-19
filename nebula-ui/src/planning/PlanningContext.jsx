@@ -13,6 +13,61 @@ const EMPTY = {
 };
 const PlanningContext = createContext(null);
 
+const newest = (rows) => [...rows].sort((left, right) =>
+  String(right.created_at || "").localeCompare(String(left.created_at || "")));
+
+export function reconcilePlanningState(current, catalog) {
+  const instances = newest(catalog.instances || []);
+  const baselines = newest(catalog.operational_baselines || []);
+  const officialRuns = newest(catalog.official_runs || []);
+  const operationalRuns = newest(catalog.operational_runs || []);
+
+  const requirements = Object.fromEntries(["A", "B", "C"].map((scenario) => {
+    const selected = current.requirements?.[scenario];
+    const revision = instances.find((row) => row.revision_id === selected?.instanceRevisionId)
+      || instances[0];
+    if (!revision) return [scenario, null];
+    const selectedRun = officialRuns.find((row) =>
+      row.run_id === selected?.runId
+      && row.revision_id === revision.revision_id
+      && row.scenario === scenario
+      && row.status === "SUCCEEDED");
+    return [scenario, {
+      mode: "requirements", scenario,
+      instanceId: revision.instance_id,
+      instanceRevision: revision.revision_number,
+      instanceRevisionId: revision.revision_id,
+      runId: selectedRun?.run_id || null,
+    }];
+  }));
+
+  const operations = Object.fromEntries(["A", "B", "C"].map((scenario) => {
+    const selected = current.operations?.[scenario];
+    const matchingBaselines = selected?.baselineId
+      ? baselines.filter((row) => row.baseline_id === selected.baselineId)
+      : [];
+    const baseline = matchingBaselines.find((row) => row.baseline_revision === selected?.baselineRevision)
+      || matchingBaselines[0]
+      || baselines[0];
+    if (!baseline) return [scenario, null];
+    const selectedRun = operationalRuns.find((row) =>
+      row.run_id === selected?.runId
+      && row.baseline_id === baseline.baseline_id
+      && row.baseline_revision === baseline.baseline_revision
+      && row.scenario === scenario
+      && row.status === "SUCCEEDED");
+    return [scenario, {
+      mode: "operations", scenario,
+      baselineId: baseline.baseline_id,
+      baselineRevision: baseline.baseline_revision,
+      runId: selectedRun?.run_id || null,
+      instanceRevisionId: baseline.official_revision_id,
+    }];
+  }));
+
+  return { ...current, requirements, operations };
+}
+
 const readSaved = () => {
   try { return { ...EMPTY, ...JSON.parse(localStorage.getItem(STORAGE_KEY) || "{}") }; }
   catch { return EMPTY; }
@@ -40,12 +95,8 @@ export function PlanningProvider({ children }) {
   useEffect(() => {
     if (!catalog) return;
     setState((current) => {
-      const requirements = Object.fromEntries(Object.entries(current.requirements).map(([scenario, selected]) => [scenario,
-        selected && catalog.instances.some((row) => row.revision_id === selected.instanceRevisionId) ? selected : null]));
-      const operations = Object.fromEntries(Object.entries(current.operations).map(([scenario, selected]) => [scenario,
-        selected && catalog.operational_baselines.some((row) => row.baseline_id === selected.baselineId && row.baseline_revision === selected.baselineRevision) ? selected : null]));
-      return JSON.stringify(requirements) === JSON.stringify(current.requirements) && JSON.stringify(operations) === JSON.stringify(current.operations)
-        ? current : { ...current, requirements, operations };
+      const reconciled = reconcilePlanningState(current, catalog);
+      return JSON.stringify(reconciled) === JSON.stringify(current) ? current : reconciled;
     });
   }, [catalog]);
 
@@ -94,19 +145,24 @@ export function PlanningProvider({ children }) {
   };
 
   const solve = async () => {
-    if (!identity) return;
+    if (!identity) throw new Error("No persisted planning instance is available. Upload the official eight-file bundle first.");
     setSolving(true); setError(null);
     try {
       if (state.mode === "requirements") {
-        const queued = await solveRequirements(identity);
-        await executeOfficialRun(queued.run_id);
-        let progress = await loadOfficialRunProgress(queued.run_id);
-        while (["QUEUED", "RUNNING"].includes(progress.status)) {
-          await new Promise((resolve) => setTimeout(resolve, 350));
-          progress = await loadOfficialRunProgress(queued.run_id);
+        const completed = {};
+        for (const scenario of ["A", "B", "C"]) {
+          const scenarioIdentity = state.requirements[scenario] || { ...identity, scenario };
+          const queued = await solveRequirements({ ...scenarioIdentity, scenario });
+          await executeOfficialRun(queued.run_id);
+          let progress = await loadOfficialRunProgress(queued.run_id);
+          while (["QUEUED", "RUNNING"].includes(progress.status)) {
+            await new Promise((resolve) => setTimeout(resolve, 350));
+            progress = await loadOfficialRunProgress(queued.run_id);
+          }
+          if (progress.status !== "SUCCEEDED") throw new Error(`Official solve ${scenario} ended with ${progress.status}`);
+          completed[scenario] = { ...scenarioIdentity, scenario, runId: queued.run_id };
         }
-        if (progress.status !== "SUCCEEDED") throw new Error(`Official solve ended with ${progress.status}`);
-        setState((current) => ({ ...current, requirements: { ...current.requirements, [current.scenario]: { ...identity, runId: queued.run_id } } }));
+        setState((current) => ({ ...current, requirements: { ...current.requirements, ...completed } }));
       } else {
         const result = await solveOperations(identity, new Date().toISOString());
         if (result.result.status !== "SUCCEEDED") throw new Error(`Operational solve ended with ${result.result.status}`);

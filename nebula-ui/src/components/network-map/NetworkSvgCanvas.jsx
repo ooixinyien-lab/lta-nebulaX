@@ -23,6 +23,9 @@ export default function NetworkSvgCanvas({
     }
     return set;
   }, [occupancy]);
+  const maintenanceLocations = useMemo(() => new Set((occupancy?.maintenance || [])
+    .filter((visit) => !visit.week || visit.week === currentWeek)
+    .flatMap((visit) => visit.location_ids || (visit.sector_id ? [visit.sector_id] : []))), [occupancy, currentWeek]);
 
   // Buffer locations
   const bufferLocationsSet = useMemo(() => {
@@ -547,6 +550,22 @@ export default function NetworkSvgCanvas({
                     />
                   </g>
                 );
+              })}
+            </g>
+          )}
+
+          {layers.maintenance && maintenanceLocations.size > 0 && (
+            <g className="maintenance-overlay-layer">
+              {Object.entries(sectorLayout).map(([locId, sec]) => {
+                if (!maintenanceLocations.has(locId)) return null;
+                const secY = sec.lineCode === "BET" ? sec.y - 40 : sec.y;
+                return <g key={`maint-sec-${locId}`}><line x1={sec.x1} y1={secY} x2={sec.x2} y2={secY} stroke="#fbbf24" strokeWidth="10" strokeOpacity="0.9" strokeDasharray="3,3" /><text x={sec.midX} y={secY - 9} fill="#fde68a" fontSize="9" fontWeight="800" textAnchor="middle">MAINT</text></g>;
+              })}
+              {Object.entries(stationLayout).map(([key, stn]) => {
+                const ids = [`PLAT:${stn.lineCode}:${stn.stationId}:EB`, `PLAT:${stn.lineCode}:${stn.stationId}:WB`];
+                if (!ids.some((id) => maintenanceLocations.has(id))) return null;
+                const y = stn.lineCode === "BET" ? stn.y - 40 : stn.y;
+                return <g key={`maint-stn-${key}`}><circle cx={stn.x} cy={y} r="15" fill="#f59e0b" fillOpacity="0.25" stroke="#fbbf24" strokeWidth="3" strokeDasharray="4,2" /><text x={stn.x} y={y - 20} fill="#fde68a" fontSize="8" fontWeight="800" textAnchor="middle">MAINT</text></g>;
               })}
             </g>
           )}

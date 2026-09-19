@@ -24,6 +24,8 @@ export default function NetworkMapWorkspace({
   onSelectEntity: controlledOnSelectEntity,
   embedded = false,
   identity = null,
+  weeklySummary: controlledWeeklySummary = null,
+  onExport,
 }) {
   const { context, activities, loading: topoLoading, error: topoError } = useNetworkTopology(identity);
 
@@ -179,7 +181,6 @@ export default function NetworkMapWorkspace({
             occError={occError}
             onRetry={retryOccupancy}
           />
-
           {/* Top filter and overlay toggles */}
           <div className="filter-layer-bar mb-3 max-w-[1060px] w-full mx-auto relative z-30">
             <ActivityFilter
@@ -212,6 +213,7 @@ export default function NetworkMapWorkspace({
               onSelectEntity={handleSelectEntity}
               tooltip={tooltip}
               setTooltip={setTooltip}
+              currentWeek={week}
             />
 
             <MapTooltip tooltip={tooltip} />
@@ -226,7 +228,7 @@ export default function NetworkMapWorkspace({
               startDate={startDate}
               isPlaying={isPlaying}
               onTogglePlay={togglePlay}
-              weeklySummary={context?.weeklySummary || []}
+              weeklySummary={controlledWeeklySummary || context?.weeklySummary || []}
             />
           </div>
         </section>

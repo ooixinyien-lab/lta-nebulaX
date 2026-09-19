@@ -1,14 +1,12 @@
 import React from 'react';
-import { Calendar, Map, Upload, Plus, Sparkles, Check } from 'lucide-react';
+import { Map, Upload, Plus, Sparkles, Check } from 'lucide-react';
 
 const NAV_ITEMS = [
-  { id: 'network_map', label: 'Interactive Network Map', icon: Map },
-  { id: 'matrix', label: 'Schedule Matrix & Drag Dispatch', icon: Calendar },
+  { id: 'dashboard', label: 'Dashboard', icon: Map },
   { id: 'upload', label: 'Data Ingestion', icon: Upload },
-  { id: 'calendar_preview', label: 'Actual Night Preview', icon: Calendar },
 ];
 
-export default function AppHeader({ activeTab, onNavigate, mode, scenario, onModeChange, onScenarioChange, onAddJob, onSolve, onAccept, solving, hasCandidate }) {
+export default function AppHeader({ activeTab, onNavigate, mode, scenario, onModeChange, onScenarioChange, onAddJob, onSolve, onAccept, solving, hasCandidate, solveDisabled = false }) {
   return (
     <header className="app-header bg-slate-950/90 border-b border-slate-800/80 px-4 py-2 flex flex-wrap items-center justify-between gap-3 text-xs">
       <nav className="flex min-w-0 items-center gap-4 overflow-x-auto" aria-label="Primary navigation">
@@ -50,7 +48,7 @@ export default function AppHeader({ activeTab, onNavigate, mode, scenario, onMod
           ))}
         </div>
         {mode === 'operations' && <button type="button" onClick={onAddJob} className="flex items-center gap-1 rounded-lg border border-slate-700 px-3 py-1.5 text-slate-200 hover:bg-slate-800"><Plus size={13}/> Add Job Request</button>}
-        <button type="button" onClick={onSolve} disabled={solving} className="flex items-center gap-1 rounded-lg bg-cyan-500 px-3 py-1.5 font-bold text-slate-950 disabled:opacity-50"><Sparkles size={13}/>{solving ? 'Solving…' : mode === 'operations' ? 'Auto Solve' : 'Solve'}</button>
+        <button type="button" onClick={onSolve} disabled={solving || solveDisabled} title={solveDisabled ? `Scenario ${scenario} is already solved` : undefined} className="flex items-center gap-1 rounded-lg bg-cyan-500 px-3 py-1.5 font-bold text-slate-950 disabled:opacity-50 disabled:cursor-not-allowed"><Sparkles size={13}/>{solving ? 'Solving…' : mode === 'operations' ? 'Auto Solve' : 'Solve All Scenarios'}</button>
         {mode === 'operations' && hasCandidate && <button type="button" onClick={onAccept} className="flex items-center gap-1 rounded-lg bg-emerald-500 px-3 py-1.5 font-bold text-slate-950"><Check size={13}/> Accept Schedule</button>}
       </div>
     </header>

@@ -740,6 +740,43 @@ def _calendarized_official_seed(
     )
 
 
+def _validated_baseline_seed(
+    problem: ProblemInstance,
+    baseline: BaselineBundle,
+    jobs: list[ProjectJob],
+    request: ReplanRequest,
+) -> CandidateSchedule | None:
+    """Retain a complete validated baseline when a bounded replan finds no incumbent."""
+
+    if not baseline.project_accesses or request.additions or request.changes:
+        return None
+    validation = validate_operational_schedule(
+        problem,
+        baseline,
+        jobs,
+        baseline.project_accesses,
+        request.scenario,
+    )
+    if not validation.passed:
+        return None
+    cost = compute_scenario_cost(
+        problem,
+        baseline,
+        jobs,
+        baseline.project_accesses,
+        request.scenario,
+    ).model_copy(update={"best_known": False, "proof_status": "unknown"})
+    return CandidateSchedule(
+        status="FEASIBLE",
+        projects=list(baseline.project_accesses),
+        maintenance_visits=list(baseline.maintenance_visits),
+        cost=cost,
+        disruption=compute_disruption(baseline, baseline.project_accesses),
+        validation=validation,
+        runtime_seconds=0.0,
+    )
+
+
 def solve_schedule_insertion(
     problem: ProblemInstance,
     baseline: BaselineBundle,
@@ -767,6 +804,7 @@ def solve_schedule_insertion(
     jobs.extend(job for job in additions if job.job_id not in existing_ids)
     jobs, calendar, forced_locks, supply_delta = _apply_changes(baseline, jobs, request)
     fixed, slots = _fixed_and_slots(baseline, jobs, request, forced_locks)
+    retained_baseline = _validated_baseline_seed(problem, baseline, jobs, request)
     total_budget = request.options.time_limit_seconds
     reference_seconds = max(0.05, total_budget * 0.60)
     if len(jobs) > 20 and not baseline.project_accesses and not baseline.project_jobs and not request.additions:
@@ -783,6 +821,20 @@ def solve_schedule_insertion(
             )
     reference, reference_objective, reference_status = _solve_candidate(problem, baseline, jobs, fixed, slots, request, calendar, supply_delta, reference_seconds)
     if reference is None:
+        if retained_baseline is not None and reference_status == "UNKNOWN":
+            return ScheduleInsertionResult(
+                baseline_id=baseline.baseline_id,
+                baseline_revision=baseline.revision,
+                scenario=request.scenario,
+                status="SUCCEEDED",
+                reference_candidate=retained_baseline,
+                published_candidate="reference",
+                configuration={
+                    **config.model_dump(mode="json"),
+                    "engine_mode": "retained_validated_baseline",
+                    "solver_outcome": reference_status,
+                },
+            )
         return ScheduleInsertionResult(
             baseline_id=baseline.baseline_id,
             baseline_revision=baseline.revision,

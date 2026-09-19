@@ -418,21 +418,70 @@ def _build_daily_model(
 
     # Secondary tie-breakers:
     # Level 2: minimize total access rows (prefer ECLO efficiency when official score is tied)
-    # Level 3: deterministic early-date tie-breaker
+    # Level 3: operational dispatch (workload leveling across days, contract spacing, weekend ECLO, week completion)
     total_accesses = cp_model.LinearExpr.sum(list(artifacts.scheduled.values()))
     maximum_accesses = sum(len(d) for d in artifacts.eligible_dates.values())
 
-    max_day_offset = horizon * 7
-    date_pref_terms: list[cp_model.LinearExpr] = []
+    # 1. Week completion preference (prefer earlier weeks over postponing, neutral within week)
+    week_pref_terms: list[cp_model.LinearExpr] = []
     for (act_id, dt), z_var in artifacts.scheduled.items():
-        offset = (dt - problem.parameters.horizon_start).days
-        date_pref_terms.append(offset * z_var)
+        w = problem.parameters.date_to_week(dt)
+        week_pref_terms.append((w - 1) * z_var)
 
-    max_date_pref = maximum_accesses * max_day_offset
-    calendar_secondary = cp_model.LinearExpr.sum(date_pref_terms)
+    # 2. Daily workload leveling across days of the week:
+    # Penalize nightly concentration above 1 access per night in a week
+    overload_terms: list[cp_model.LinearExpr] = []
+    for w in range(1, horizon + 1):
+        for dt in week_dates(problem, w):
+            date_z_vars = [
+                artifacts.scheduled[(act_id, dt)]
+                for act_id in artifacts.eligible_dates
+                if (act_id, dt) in artifacts.scheduled
+            ]
+            if not date_z_vars:
+                continue
+            overload = new_int(0, len(date_z_vars), f"overload[{dt.isoformat()}]")
+            model.add(overload >= cp_model.LinearExpr.sum(date_z_vars) - 1)
+            model.add(overload >= 0)
+            overload_terms.append(overload)
 
-    access_secondary = (max_date_pref + 1) * total_accesses + calendar_secondary
-    access_secondary_max = (max_date_pref + 1) * maximum_accesses + max_date_pref
+    # 3. Contract consecutive night spacing (avoid back-to-back nights for the same contract in a week)
+    consec_terms: list[cp_model.LinearExpr] = []
+    for contract in problem.contracts:
+        c_num = contract.contract_number
+        for w in range(1, horizon + 1):
+            dates_in_w = sorted(week_dates(problem, w))
+            for i in range(len(dates_in_w) - 1):
+                d1, d2 = dates_in_w[i], dates_in_w[i + 1]
+                u1 = artifacts.contract_date_used.get((c_num, d1))
+                u2 = artifacts.contract_date_used.get((c_num, d2))
+                if u1 is not None and u2 is not None:
+                    consec = new_bool(f"consec[{c_num},{w},{d1.isoformat()}]")
+                    model.add(consec >= u1 + u2 - 1)
+                    consec_terms.append(consec)
+
+    # 4. ECLO weekend preference: penalize ECLO on Sunday-Thursday (weekdays 0, 1, 2, 3, 6)
+    eclo_weekday_penalty: list[cp_model.LinearExpr] = []
+    for (act_id, dt), eclo_var in artifacts.eclo.items():
+        if dt.weekday() not in (4, 5):  # 4 = Friday, 5 = Saturday
+            eclo_weekday_penalty.append(eclo_var)
+
+    calendar_secondary = (
+        cp_model.LinearExpr.sum(week_pref_terms)
+        + 3 * cp_model.LinearExpr.sum(overload_terms)
+        + 5 * cp_model.LinearExpr.sum(consec_terms)
+        + 10 * cp_model.LinearExpr.sum(eclo_weekday_penalty)
+    )
+
+    max_calendar_secondary = (
+        maximum_accesses * horizon
+        + 3 * maximum_accesses
+        + 5 * len(problem.contracts) * horizon * 6
+        + 10 * maximum_accesses
+    )
+
+    access_secondary = (max_calendar_secondary + 1) * total_accesses + calendar_secondary
+    access_secondary_max = (max_calendar_secondary + 1) * maximum_accesses + max_calendar_secondary
 
     artifacts.maximum_secondary_cost = access_secondary_max
     artifacts.objective_scale = access_secondary_max + 1

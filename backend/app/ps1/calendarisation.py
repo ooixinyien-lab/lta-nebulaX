@@ -362,7 +362,7 @@ def calendarise(
     # 4. Tie-Breaker: Maintain minimal early-week bias for reproducible determinism.
     obj_terms: list = []
 
-    # 1. Workload Leveling (Peak Night Load Minimization)
+    # 1. Workload Leveling (Peak Night Load Minimization & Nightly Dispersion)
     for week, accesses in accesses_by_week.items():
         peak_load = model.new_int_var(0, len(accesses), f"peak_load[{week}]")
         for service_date in week_dates(problem, week):
@@ -373,6 +373,9 @@ def calendarise(
             ]
             if on_date:
                 model.add(peak_load >= sum(on_date))
+                overload = model.new_int_var(0, len(on_date), f"overload[{service_date}]")
+                model.add(overload >= sum(on_date) - 1)
+                obj_terms.append(overload * 10)
         obj_terms.append(peak_load * 30)
 
     # 2. Contract Inter-Access Spacing (Prevent Fatigue & Allow Curing/Repositioning)
@@ -400,10 +403,6 @@ def calendarise(
                 if sdate.weekday() not in (4, 5):  # 4 = Friday, 5 = Saturday
                     var = assignment[(access.activity_id, access.access_seq, sdate)]
                     obj_terms.append(var * 25)
-
-    # 4. Deterministic Tie-Breaker
-    for dv in day_var.values():
-        obj_terms.append(dv * 1)
 
     model.minimize(sum(obj_terms))
     solver = cp_model.CpSolver()

@@ -132,16 +132,15 @@ npm run dev
 
 ## 4. Step-by-Step Guide for Judges: PS1 Requirements View
 
-This walkthrough guides judges through testing any custom 8-file PS1 dataset, running the CP-SAT optimisation engine, visually verifying constraints on the interactive map, and exporting the exact official 3-CSV bundle.
+This walkthrough guides judges through testing any custom 8-file PS1 dataset, running the CP-SAT optimisation engine, visually verifying its constraints, asking the grounded Schedule Explainer why individual scheduling decisions were made, and exporting the exact official 3-CSV submission bundle.
 
 ```
-┌─────────────────────────────────────────────────────────────────────────────────┐
-│                           PS1 JUDGE VERIFICATION FLOW                           │
-│                                                                                 │
-│  [1. Ingestion]       [2. Select Mode]     [3. Solve Engine]    [4. Verification]     [5. Export]      │
-│  Upload 8 CSVs   ───►  PS1 Requirements ───► Solve All      ───► Interactive Map ───► Download 3 CSVs  │
-│  & Validate DB         Scenario A/B/C       CP-SAT 100%          & Dispatch Board     Official Bundle  │
-└─────────────────────────────────────────────────────────────────────────────────┘
+┌──────────────────────────────────────────────────────────────────────────────────┐
+│                         PS1 JUDGE VERIFICATION FLOW                              │
+│                                                                                  │
+│ [1. Ingestion] → [2. Scenario] → [3. Solve] → [4. Inspect] → [5. Explain] → [6. Export] │
+│ Upload 8 CSVs     Select A/B/C     Run CP-SAT    Map & Board    AI Chatbot      3 CSVs   │
+└──────────────────────────────────────────────────────────────────────────────────┘
 ```
 
 ### Step 1: Open the Application & Navigate to Data Ingestion
@@ -198,7 +197,32 @@ This walkthrough guides judges through testing any custom 8-file PS1 dataset, ru
    - Inspect co-sharing group composition and verify that no two PC activities ever share a group.
    - Click any activity card to open the **Activity Inspector Drawer**, displaying contract IDs, access sequences, workload yield progress, predecessor dependencies, and nature of work.
 
-### Step 6: Export the Official 3-CSV Submission Bundle
+### Step 6: Explain Solver Decisions with the Grounded Schedule Explainer
+1. Click the **Chat** button in the bottom-right corner of the PS1 Requirements View.
+2. Select an activity from the **Interactive Network Map** or **Possession Dispatch Board**, or include its activity ID in your question.
+3. Ask the chatbot to explain why the solver placed the activity in its assigned week, location, access type, or co-sharing group.
+4. Example questions include:
+   - *"Why was Activity A036 scheduled in Week 22?"*
+   - *"Which constraints prevented Activity A036 from being scheduled earlier?"*
+   - *"Why are these activities allowed to share the same possession group?"*
+   - *"Which predecessor activities affected this placement?"*
+   - *"How did the selected scenario affect this scheduling decision?"*
+   - *"Which activities contribute to the current penalty score?"*
+5. Where supporting evidence is available, the Schedule Explainer identifies:
+   - The activity's release date, deadline, workload, and predecessor dependencies.
+   - The selected week, location, access type, and co-sharing group.
+   - Applicable location-supply, topology, possession-mixing, and protection-buffer constraints.
+   - Scenario-specific restrictions for Scenarios A, B, and C.
+   - Relevant objective components, including lateness ($P$), excess possession slots ($V$), and Early Closure/Late Opening (ECLO) accesses ($E$).
+   - Constraints or resource limits that ruled out earlier or alternative placements.
+6. **Grounding and Safety:**
+   - The chatbot is strictly read-only and cannot modify the schedule or rerun the solver.
+   - Its answers are grounded in structured facts from the input data, selected scenario, solver output, objective scores, and independent validation results.
+   - It must not invent a reason when the available evidence does not establish one.
+   - If the exact reason cannot be proven from the available evidence, the chatbot clearly states that the reason could not be determined.
+7. The Schedule Explainer provides a human-readable explanation of the solver's decisions, but it does not replace the independent PS1 validator or official score reconstruction.
+
+### Step 7: Export the Official 3-CSV Submission Bundle
 1. Click the **Export Schedule (CSV)** button in the network toolbar or dispatch board header.
 2. ForRail instantly generates and downloads the three required competition CSV files:
    - **`SCHEDULE_ACCESS.csv`**: Contains `activity_id,access_seq,week,eclo,access_night`.

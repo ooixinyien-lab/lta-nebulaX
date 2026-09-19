@@ -72,7 +72,9 @@ def create_app(settings: Settings | None = None):
 
     @app.get("/", include_in_schema=False)
     def index():
-        """Open the current API-first PS1 workflow instead of the retired UI."""
+        """Redirect to modern UI when built, otherwise FastAPI docs."""
+        if (ROOT / "nebula-ui" / "dist" / "index.html").is_file():
+            return RedirectResponse(url="/network-map", status_code=307)
         return RedirectResponse(url="/docs", status_code=307)
     return app
 

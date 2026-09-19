@@ -1,0 +1,15 @@
+.git
+.gitignore
+.venv
+__pycache__
+*.pyc
+*.pyo
+*.pyd
+.pytest_cache
+*.sqlite3
+.env
+.DS_Store
+node_modules
+nebula-ui/node_modules
+nebula-ui/dist
+outputs/*

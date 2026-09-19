@@ -23,8 +23,9 @@ export default function NetworkMapWorkspace({
   selectedEntity: controlledEntity,
   onSelectEntity: controlledOnSelectEntity,
   embedded = false,
+  identity = null,
 }) {
-  const { context, activities, loading: topoLoading, error: topoError } = useNetworkTopology();
+  const { context, activities, loading: topoLoading, error: topoError } = useNetworkTopology(identity);
 
   // Controlled or uncontrolled scenario
   const [internalScenario, setInternalScenario] = useState("A");
@@ -75,7 +76,8 @@ export default function NetworkMapWorkspace({
   const { occupancy, loading: occLoading, error: occError, retry: retryOccupancy } = useNetworkOccupancy(
     scenario,
     week,
-    selectedActivityId
+    selectedActivityId,
+    identity
   );
 
   const { isPlaying, toggle: togglePlay } = useWeeklyPlayback(

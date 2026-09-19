@@ -171,3 +171,17 @@ The legacy single-night CP-SAT solver (`backend/app/services/cp_sat.py`) and val
 - Designed around single-night minute grids, synthetic engineer qualifications, named equipment, and partial recovery (deferring work).
 - **Retired from official PS1 scoring:** Deferring requests in recovery violates PS1's mandatory complete-workload rule.
 - Retained only as a historical teaching scaffold. It may not import while the deleted legacy domain module is absent and must not be presented as the active execution path.
+
+## 9. Application routing
+
+The application exposes two planning modes without merging engines:
+
+- **PS1 Requirements → A/B/C → `backend/app/ps1/solver.py`**. A queued run
+  records an exact instance revision and persists only a complete locally
+  validated incumbent.
+- **Operations Mode → A/B/C → `backend/app/schedule_insertion/solver.py`**.
+  An exact baseline revision is solved into a review candidate and is promoted
+  only by Accept Schedule.
+
+Both schedule and map projections require the same explicit identity. Newest
+run timestamps are discovery metadata, never an authoritative selection rule.

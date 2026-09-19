@@ -1,6 +1,7 @@
 /**
  * Frontend network API client connecting to FastAPI /api/ps1/network endpoints.
  */
+import { loadMapSchedule } from "./planningApi";
 
 function requireObject(data, endpoint) {
   if (!data || typeof data !== "object" || Array.isArray(data)) {
@@ -31,9 +32,10 @@ export async function fetchNetworkContext(signal) {
   );
 }
 
-export async function fetchNetworkTopology(signal) {
+export async function fetchNetworkTopology(signal, revisionId = null) {
+  const suffix = revisionId ? `?revision_id=${encodeURIComponent(revisionId)}` : "";
   const data = requireObject(
-    await fetchJson("/api/ps1/network/topology", signal, "network topology"),
+    await fetchJson(`/api/ps1/network/topology${suffix}`, signal, "network topology"),
     "network topology"
   );
   ["lines", "stations", "sectors", "locations"].forEach((key) => {
@@ -42,14 +44,18 @@ export async function fetchNetworkTopology(signal) {
   return data;
 }
 
-export async function fetchNetworkActivities(signal) {
+export async function fetchNetworkActivities(signal, revisionId = null) {
+  const suffix = revisionId ? `?revision_id=${encodeURIComponent(revisionId)}` : "";
   return requireArray(
-    await fetchJson("/api/ps1/network/activities", signal, "network activities"),
+    await fetchJson(`/api/ps1/network/activities${suffix}`, signal, "network activities"),
     "network activities"
   );
 }
 
-export async function fetchNetworkOccupancy(scenario = "A", week = 1, activityId = null, signal) {
+export async function fetchNetworkOccupancy(scenario = "A", week = 1, activityId = null, signal, identity = null) {
+  if (identity) {
+    return loadMapSchedule(identity, week, signal);
+  }
   const params = new URLSearchParams({
     scenario,
     week: String(week),

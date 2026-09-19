@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 
-from fastapi import APIRouter, Depends, File, HTTPException, Request, UploadFile
+from fastapi import APIRouter, BackgroundTasks, Depends, File, HTTPException, Request, UploadFile
 from pydantic import Field
 from backend.app.domain_models import PS1Base
 from backend.app.db.records import decode, get
@@ -14,6 +14,8 @@ from backend.app.db.repositories.audit import record_event
 from backend.app.db.repositories.instances import fingerprint_files, find_fingerprint
 from backend.app.db.seed import OFFICIAL_FILES, validate_bundle, import_bundle
 from backend.app.db.repositories.runs import create_run
+from backend.app.db.reset import clear_planning_data
+from backend.app.ps1.run_worker import execute_official_run
 from backend.app.io import DataLayerError
 from backend.app.schemas import User
 
@@ -24,6 +26,7 @@ EXPECTED_FILES = set(OFFICIAL_FILES)
 
 class SolveRequest(PS1Base):
     instance_id: str
+    instance_revision_id: str | None = None
     scenario: str = Field(pattern="^[ABC]$")
     time_limit_seconds: float = Field(default=60.0, ge=0.1, le=3600)
     baseline_run_id: str | None = None
@@ -71,12 +74,31 @@ def get_instance(instance_id: str, request: Request, user: User = Depends(curren
 @router.post("/solve", status_code=202)
 def queue_solve(payload: SolveRequest, request: Request, user: User = Depends(current_user)):
     with _db(request).connection(write=True) as session:
-        revision = decode(InstanceRevision, session.execute("SELECT * FROM instance_revisions WHERE instance_id=? ORDER BY revision_number DESC LIMIT 1", (payload.instance_id,)).fetchone())
+        if payload.instance_revision_id:
+            revision = decode(InstanceRevision, session.execute(
+                "SELECT * FROM instance_revisions WHERE id=? AND instance_id=?",
+                (payload.instance_revision_id, payload.instance_id),
+            ).fetchone())
+        else:
+            revision = decode(InstanceRevision, session.execute("SELECT * FROM instance_revisions WHERE instance_id=? ORDER BY revision_number DESC LIMIT 1", (payload.instance_id,)).fetchone())
         if revision is None:
             raise HTTPException(404, "Instance has no revision")
         run = create_run(session, revision_id=revision.id, scenario=payload.scenario, created_by=user.id, time_limit=payload.time_limit_seconds, baseline_run_id=payload.baseline_run_id)
         record_event(session, actor=user.id, action="solver_run_queued", entity_type="solver_run", entity_id=run.id, detail={"scenario": payload.scenario})
-        return {"run_id": run.id, "instance_id": payload.instance_id, "revision_id": revision.id, "scenario": run.scenario, "status": run.status, "created_at": run.created_at.isoformat()}
+        response = {"run_id": run.id, "instance_id": payload.instance_id, "revision_id": revision.id, "scenario": run.scenario, "status": run.status, "created_at": run.created_at.isoformat()}
+    return response
+
+
+@router.post("/runs/{run_id}/execute", status_code=202)
+def execute_run(run_id: str, request: Request, background_tasks: BackgroundTasks, user: User = Depends(current_user)):
+    with _db(request).connection() as session:
+        run = get(session, SolverRun, run_id)
+        if run is None:
+            raise HTTPException(404, "Run not found")
+        if run.status != "QUEUED":
+            raise HTTPException(409, "Only a queued run can be executed")
+    background_tasks.add_task(execute_official_run, _db(request), run_id)
+    return {"run_id": run_id, "status": "QUEUED"}
 
 
 @router.get("/runs/{run_id}/progress")
@@ -97,4 +119,37 @@ def run_results(run_id: str, request: Request, user: User = Depends(current_user
         accesses = [decode(RunAccess, row) for row in session.execute("SELECT * FROM run_accesses WHERE run_id=? ORDER BY activity_id,access_seq", (run_id,))]
         occupancy = [decode(RunOccupancy, row) for row in session.execute("SELECT * FROM run_occupancies WHERE run_id=? ORDER BY week,location_id,activity_id", (run_id,))]
         contracts = [decode(RunContractResult, row) for row in session.execute("SELECT * FROM run_contract_results WHERE run_id=? ORDER BY contract_number", (run_id,))]
-        return {"run_id": run.id, "revision_id": run.revision_id, "scenario": run.scenario, "status": run.status, "workload_complete": run.workload_complete, "accesses": [{"activity_id": x.activity_id, "access_seq": x.access_seq, "week": x.week, "eclo": x.eclo, "access_night": x.access_night} for x in accesses], "occupancy": [{"activity_id": x.activity_id, "week": x.week, "location_id": x.location_id, "co_share_group": x.co_share_group} for x in occupancy], "contract_results": [{"scenario": x.scenario, "contract_number": x.contract_number, "simulated_completion_date": x.simulated_completion_date.isoformat(), "overrun_days": x.overrun_days} for x in contracts]}
+        revision = get(session, InstanceRevision, run.revision_id)
+        return {"run_id": run.id, "instance_id": revision.instance_id if revision else None, "revision_id": run.revision_id, "scenario": run.scenario, "status": run.status, "workload_complete": run.workload_complete, "accesses": [{"activity_id": x.activity_id, "access_seq": x.access_seq, "week": x.week, "eclo": x.eclo, "access_night": x.access_night} for x in accesses], "occupancy": [{"activity_id": x.activity_id, "week": x.week, "location_id": x.location_id, "co_share_group": x.co_share_group} for x in occupancy], "contract_results": [{"scenario": x.scenario, "contract_number": x.contract_number, "simulated_completion_date": x.simulated_completion_date.isoformat(), "overrun_days": x.overrun_days} for x in contracts]}
+
+
+@router.get("/planning-context")
+def planning_context(request: Request, user: User = Depends(current_user)):
+    """Return selectable identities; never select a schedule on the client's behalf."""
+    with _db(request).connection() as session:
+        instances = [dict(row) for row in session.execute(
+            "SELECT i.id instance_id,r.id revision_id,r.revision_number,r.created_at "
+            "FROM instances i JOIN instance_revisions r ON r.instance_id=i.id "
+            "WHERE r.validation_status='VALID' ORDER BY r.created_at DESC"
+        )]
+        official_runs = [dict(row) for row in session.execute(
+            "SELECT id run_id,revision_id,scenario,status,created_at FROM solver_runs "
+            "WHERE status='SUCCEEDED' ORDER BY created_at DESC"
+        )]
+        baselines = [dict(row) for row in session.execute(
+            "SELECT baseline_key baseline_id,revision baseline_revision,official_revision_id,created_at "
+            "FROM schedule_insertion_baselines ORDER BY created_at DESC"
+        )]
+        operational_runs = [dict(row) for row in session.execute(
+            "SELECT id run_id,baseline_key baseline_id,baseline_revision,scenario,status,created_at "
+            "FROM schedule_insertion_runs ORDER BY created_at DESC"
+        )]
+    return {"instances": instances, "official_runs": official_runs, "operational_baselines": baselines, "operational_runs": operational_runs}
+
+
+@router.delete("/planning-data")
+def reset_planning_data(request: Request, user: User = Depends(current_user)):
+    with _db(request).connection(write=True) as session:
+        deleted = clear_planning_data(session)
+    request.app.state.network_map_service = None
+    return {"status": "cleared", "deleted": deleted}

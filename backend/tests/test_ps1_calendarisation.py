@@ -648,7 +648,7 @@ def test_schema_v1_upgrades_once_and_preserves_existing_rows(tmp_path):
     database = Database(str(tmp_path / "migration.sqlite3"))
     database.initialize()
     with database.connection(write=True) as connection:
-        connection.execute("DELETE FROM ps1_schema_version WHERE version=2")
+        connection.execute("DELETE FROM ps1_schema_version WHERE version>=2")
         for table in (
             "calendar_assignments",
             "calendarisation_attempts",
@@ -669,7 +669,7 @@ def test_schema_v1_upgrades_once_and_preserves_existing_rows(tmp_path):
     with database.connection() as connection:
         assert connection.execute(
             "SELECT MAX(version) FROM ps1_schema_version"
-        ).fetchone()[0] == 2
+        ).fetchone()[0] == 3
         assert connection.execute(
             "SELECT name FROM instances WHERE id='kept'"
         ).fetchone()[0] == "Kept"

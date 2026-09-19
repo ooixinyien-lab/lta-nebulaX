@@ -5,7 +5,7 @@ import {
   fetchNetworkActivities,
 } from "../services/networkApi";
 
-export function useNetworkTopology() {
+export function useNetworkTopology(identity = null) {
   const [context, setContext] = useState(null);
   const [topology, setTopology] = useState(null);
   const [activities, setActivities] = useState([]);
@@ -21,8 +21,8 @@ export function useNetworkTopology() {
         setError(null);
         const [ctxData, topoData, actData] = await Promise.all([
           fetchNetworkContext(controller.signal),
-          fetchNetworkTopology(controller.signal),
-          fetchNetworkActivities(controller.signal),
+          fetchNetworkTopology(controller.signal, identity?.instanceRevisionId),
+          fetchNetworkActivities(controller.signal, identity?.instanceRevisionId),
         ]);
         setContext(ctxData);
         setTopology(topoData);
@@ -41,7 +41,7 @@ export function useNetworkTopology() {
     return () => {
       controller.abort();
     };
-  }, []);
+  }, [identity?.instanceRevisionId]);
 
   return { context, topology, activities, loading, error };
 }

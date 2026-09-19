@@ -28,7 +28,11 @@ from backend.app.schedule_insertion.persistence import (
     save_run,
 )
 from backend.app.schedule_insertion.solver import solve_schedule_insertion
+from backend.app.schedule_insertion.solver import _official_jobs
 from backend.app.schedule_insertion.validation import validate_maintenance_fixture
+from backend.app.schedule_insertion.validation import validate_operational_schedule
+from backend.app.schedule_insertion.fixture_generator import build_fixture
+from backend.app.schedule_insertion.models import ScheduleScenario
 from backend.app.schemas import User
 
 
@@ -52,6 +56,10 @@ class SolveRequest(PS1Base):
 
 class PromoteRunRequest(PS1Base):
     expected_baseline_revision: int
+
+
+class OfficialBaselineRequest(PS1Base):
+    official_revision_id: str
 
 
 def _db(request: Request):
@@ -81,10 +89,23 @@ def import_baseline(payload: BaselineImportRequest, request: Request, user: User
     return {"baseline": stored.model_dump(mode="json"), "validation": validation.model_dump(mode="json"), "official_revision_id": official_revision_id}
 
 
+@router.post("/baselines/from-official", status_code=201)
+def create_official_baseline(payload: OfficialBaselineRequest, request: Request, user: User = Depends(current_user)):
+    problem, official_revision_id = _official_problem(request, payload.official_revision_id)
+    baseline = build_fixture(problem).model_copy(update={
+        "baseline_id": f"baseline-{official_revision_id}",
+        "official_revision_id": official_revision_id,
+    })
+    with _db(request).connection(write=True) as session:
+        existing = load_baseline(session, baseline.baseline_id)
+        stored = existing or save_baseline(session, baseline, actor=user.id, official_revision_id=official_revision_id)
+    return {"baseline": stored.model_dump(mode="json"), "created": existing is None}
+
+
 @router.get("/baselines/{baseline_id}")
-def get_baseline(baseline_id: str, request: Request, user: User = Depends(current_user)):
+def get_baseline(baseline_id: str, request: Request, revision: int | None = None, user: User = Depends(current_user)):
     with _db(request).connection() as session:
-        baseline = load_baseline(session, baseline_id)
+        baseline = load_baseline(session, baseline_id, revision)
         if baseline is None:
             raise HTTPException(404, "Operational baseline not found")
         return {"baseline": baseline.model_dump(mode="json"), "revisions": list_baseline_revisions(session, baseline_id)}
@@ -93,8 +114,9 @@ def get_baseline(baseline_id: str, request: Request, user: User = Depends(curren
 @router.post("/baselines/{baseline_id}/additions", status_code=201)
 def add_jobs(baseline_id: str, payload: AdditionsRequest, request: Request, user: User = Depends(current_user)):
     with _db(request).connection(write=True) as session:
+        latest = load_baseline(session, baseline_id)
         baseline = load_baseline(session, baseline_id, payload.baseline_revision)
-        if baseline is None:
+        if baseline is None or latest is None or latest.revision != payload.baseline_revision:
             raise HTTPException(409, "Baseline revision is stale or missing")
         existing = {job.job_id for job in baseline.project_jobs}
         additions = [addition.job for addition in payload.additions if addition.job.job_id not in existing]
@@ -127,9 +149,10 @@ def promote_run(
     """Accept a validated operational run as the next immutable baseline."""
 
     with _db(request).connection(write=True) as session:
+        latest = load_baseline(session, baseline_id)
         baseline = load_baseline(session, baseline_id, payload.expected_baseline_revision)
         result = load_run(session, run_id)
-        if baseline is None or result is None or result.baseline_id != baseline_id or result.baseline_revision != baseline.revision:
+        if baseline is None or latest is None or latest.revision != payload.expected_baseline_revision or result is None or result.baseline_id != baseline_id or result.baseline_revision != baseline.revision:
             raise HTTPException(409, "Baseline or run revision is stale")
         candidate = result.lower_disruption_candidate or result.reference_candidate
         if result.status != "SUCCEEDED" or candidate is None or not candidate.validation.passed:
@@ -164,3 +187,33 @@ def get_diff(run_id: str, request: Request, user: User = Depends(current_user)):
         "disruption": candidate.disruption.model_dump(mode="json") if candidate else None,
         "published_candidate": result.published_candidate,
     }
+
+
+@router.get("/validate")
+def validate_schedule(
+    request: Request,
+    baseline_id: str,
+    baseline_revision: int,
+    scenario: ScheduleScenario,
+    run_id: str | None = None,
+    user: User = Depends(current_user),
+):
+    with _db(request).connection() as session:
+        baseline = load_baseline(session, baseline_id, baseline_revision)
+        result = load_run(session, run_id) if run_id else None
+    if baseline is None:
+        raise HTTPException(404, "Operational baseline revision not found")
+    problem, _ = _official_problem(request, baseline.official_revision_id)
+    accesses = baseline.project_accesses
+    jobs = _official_jobs(problem)
+    official_ids = {job.job_id for job in jobs}
+    jobs.extend(job for job in baseline.project_jobs if job.job_id not in official_ids)
+    if run_id:
+        if result is None or result.baseline_id != baseline_id or result.baseline_revision != baseline_revision or result.scenario != scenario:
+            raise HTTPException(409, "Candidate does not match the requested schedule identity")
+        candidate = result.lower_disruption_candidate or result.reference_candidate
+        if candidate is None:
+            return {"passed": False, "status": "failed", "findings": [f.model_dump(mode="json") for f in result.conflict_evidence]}
+        accesses = candidate.projects
+    validation = validate_operational_schedule(problem, baseline, jobs, accesses, scenario)
+    return validation.model_dump(mode="json")

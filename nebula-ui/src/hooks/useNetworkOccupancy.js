@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from "react";
 import { fetchNetworkOccupancy } from "../services/networkApi";
 
-export function useNetworkOccupancy(scenario, week, selectedActivityId = null) {
+export function useNetworkOccupancy(scenario, week, selectedActivityId = null, identity = null) {
   const [occupancy, setOccupancy] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
@@ -26,7 +26,8 @@ export function useNetworkOccupancy(scenario, week, selectedActivityId = null) {
           scenario,
           week,
           selectedActivityId,
-          controller.signal
+          controller.signal,
+          identity
         );
 
         if (currentSeq === requestSeqRef.current) {
@@ -49,7 +50,7 @@ export function useNetworkOccupancy(scenario, week, selectedActivityId = null) {
     return () => {
       controller.abort();
     };
-  }, [scenario, week, selectedActivityId, retryCount]);
+  }, [scenario, week, selectedActivityId, retryCount, identity]);
 
   return { occupancy, loading, error, retry };
 }

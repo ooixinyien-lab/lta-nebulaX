@@ -7,10 +7,12 @@ from fastapi.staticfiles import StaticFiles
 from .config import Settings, ROOT
 from .database import Database
 from .db.seed import seed_official_instance
+from .db.reset import should_auto_seed
 from .api.ps1_routes import router as ps1_router
 from .api.ps1_calendar_routes import router as ps1_calendar_router
 from .api.ps1_network_routes import router as ps1_network_router
 from .api.schedule_insertion_routes import router as schedule_insertion_router
+from .api.planning_routes import router as planning_router
 
 
 try:
@@ -24,7 +26,10 @@ def create_app(settings: Settings | None = None):
     @asynccontextmanager
     async def lifespan(app):
         db.initialize()
-        seed_official_instance(db, settings.official_data_path)
+        with db.connection() as connection:
+            auto_seed = should_auto_seed(connection)
+        if auto_seed:
+            seed_official_instance(db, settings.official_data_path)
         yield
     app = FastAPI(title="NEBULA X Rail Scheduling Engine", version="0.2.0", lifespan=lifespan)
     app.state.settings = settings
@@ -48,6 +53,7 @@ def create_app(settings: Settings | None = None):
     app.include_router(ps1_network_router)
     app.include_router(ps1_calendar_router)
     app.include_router(schedule_insertion_router)
+    app.include_router(planning_router)
     if ps1_ui_router is not None:
         app.include_router(ps1_ui_router)
     nebula_dist = ROOT / "nebula-ui" / "dist"

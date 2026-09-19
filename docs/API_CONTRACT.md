@@ -190,3 +190,32 @@ Standard HTTP status codes are used:
 - `409`: Stale revision or concurrency conflict.
 - `422`: Schema or parameter domain validation failure.
 - `503`: Database or solver engine unavailable.
+
+## Integrated planning context and explicit projections
+
+The React application uses `GET /api/ps1/planning-context` only to enumerate
+selectable immutable identities. It persists the user's selection and never
+interprets the newest timestamp as the active schedule.
+
+`GET /api/ps1/schedules/project` is the common presentation boundary:
+
+- Requirements: `mode=requirements`, `scenario`, `instance_revision_id`, and
+  `run_id` are all required.
+- Operations: `mode=operations`, `scenario`, `baseline_id`, and
+  `baseline_revision` are required; `run_id` selects an unaccepted candidate.
+- Optional `week` returns the map projection for that same identity.
+
+Mismatched run/revision/scenario combinations return `409`. Operational
+maintenance, locks, persistent access IDs, conflicts, and diffs remain in this
+extended projection and never enter the official three-CSV artifacts.
+
+Additional integrated lifecycle endpoints are:
+
+- `POST /api/ps1/schedule-insertion/baselines/from-official`
+- `GET /api/ps1/schedule-insertion/validate`
+- `DELETE /api/ps1/planning-data`
+
+The reset is transactional, preserves the schema, disables implicit official
+fixture reseeding after a user reset, and permits a fresh eight-file upload.
+Legacy network endpoints may retain sample/latest behavior for compatibility;
+the integrated React UI does not use that behavior for schedule selection.

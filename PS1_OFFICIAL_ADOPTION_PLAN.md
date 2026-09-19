@@ -588,3 +588,21 @@ The presentation team should use the same validated outputs, score decomposition
 - **Frontend/presentation owners:** review the API information and evidence needed for hidden-instance upload, scenario comparison and the disruption demonstration; implementation remains in their workstream.
 
 The first reviewable artifact remains a reproducible eight-file import and sample CSV round trip, with local accounting results and an explicit official-validator status. Once the official A/B/C baseline is dependable, implement the committed enrichments in pipeline order: calendarisation, recurrence, dynamic replanning, manual-edit validation, then grounded explanations/chat. Each stage must preserve the last validated incumbent and the official/export boundary.
+
+## Integration implementation note (19 September 2026)
+
+The canonical React application now routes PS1 Requirements A/B/C runs to the
+official persisted solver lifecycle and Operations Mode A/B/C replans to the
+separate schedule-insertion lifecycle. A single explicit planning identity
+drives the schedule matrix, map projection, operational validation, maintenance
+display, candidate diff, and acceptance action. Operational candidates are not
+published baselines until explicit promotion. The common presentation
+projection does not alter official input or output schemas.
+
+The database-backed upload endpoint is the UI authority. A transactional
+planning reset preserves the schema and suppresses automatic fixture reseeding
+after a user reset. Compatibility endpoints that discover sample/latest output
+remain isolated from the integrated UI. This completes the application wiring
+for existing official and schedule-insertion capabilities; it does not mark the
+still-planned manual repair, recurrence-policy editor, or explanation/chat
+milestones complete.

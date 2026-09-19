@@ -1,10 +1,9 @@
 import React, { useState, useMemo, useEffect, useCallback } from 'react';
 import { 
-  Calendar, Shield, Zap, Layers, Filter, 
+  Calendar, Zap, Layers, Filter,
   ChevronLeft, ChevronRight, X, AlertTriangle, RefreshCw,
-  Sparkles, RotateCcw, AlertOctagon, CheckCircle, Move, Check, Info
+  Sparkles, RotateCcw, AlertOctagon, CheckCircle, Move, Check
 } from 'lucide-react';
-import { fetchFullSchedule, rescheduleWithSolver } from './services/networkApi';
 import { evaluateScheduleConflicts, computeValidDropTargets } from './services/conflictChecker';
 
 // Access Type Semantic Styling
@@ -33,19 +32,21 @@ const ACCESS_TYPE_STYLES = {
 };
 
 const NIGHTS_OF_WEEK = [
-  { id: 1, label: 'Mon', time: '01:30', isEclo: false },
-  { id: 2, label: 'Tue', time: '01:30', isEclo: false },
-  { id: 3, label: 'Wed', time: '01:30', isEclo: false },
-  { id: 4, label: 'Thu', time: '01:30', isEclo: false },
-  { id: 5, label: 'Fri', time: '00:30', isEclo: true },
-  { id: 6, label: 'Sat', time: '00:30', isEclo: true },
-  { id: 7, label: 'Sun', time: '01:30', isEclo: false },
+  { id: 1, label: 'Local slot 1', isEclo: false },
+  { id: 2, label: 'Local slot 2', isEclo: false },
+  { id: 3, label: 'Local slot 3', isEclo: false },
+  { id: 4, label: 'Local slot 4', isEclo: false },
+  { id: 5, label: 'Local slot 5', isEclo: false },
+  { id: 6, label: 'Local slot 6', isEclo: false },
+  { id: 7, label: 'Local slot 7', isEclo: false },
 ];
 
 export default function ScheduleDashboard({
   displayData = {},
   scenario: initialScenario = 'A',
   onScenarioChange = () => {},
+  authoritativeConflicts = [],
+  highlightedJobId = null,
 }) {
   const [currentScenario, setCurrentScenario] = useState(initialScenario);
 
@@ -78,30 +79,16 @@ export default function ScheduleDashboard({
     setTimeout(() => setToastMessage(null), 4500);
   }, []);
 
-  // 1. Initial Data Fetch: Load complete schedule from backend if not already supplied
+  // The parent planning context owns the exact schedule identity and projection.
   useEffect(() => {
-    let isCancelled = false;
-    async function loadData() {
-      setIsLoading(true);
-      try {
-        const fullData = await fetchFullSchedule(currentScenario);
-        if (!isCancelled && fullData && fullData.activities?.length > 0) {
-          setScheduleData(fullData);
-          setSolverBaseline(JSON.parse(JSON.stringify(fullData))); // Deep clone for clean reset
-        }
-      } catch (err) {
-        console.warn('Backend full-schedule endpoint unavailable, using displayData fallback:', err.message);
-      } finally {
-        if (!isCancelled) setIsLoading(false);
-      }
-    }
-    loadData();
-    return () => { isCancelled = true; };
-  }, [currentScenario]);
+    setScheduleData(displayData?.identity ? displayData : null);
+    setSolverBaseline(displayData?.identity ? JSON.parse(JSON.stringify(displayData)) : null);
+    setIsLoading(false);
+  }, [displayData]);
 
   // Fallback / Normalized Data Elements
-  const activities = scheduleData?.activities || displayData.sample_activities || [];
-  const contracts = scheduleData?.contracts || displayData.sample_projects || [];
+  const activities = scheduleData?.activities || displayData.activities || displayData.sample_activities || [];
+  const contracts = scheduleData?.contracts || displayData.contracts || displayData.sample_projects || [];
   const locationsList = scheduleData?.locations || [];
   const sectorsList = scheduleData?.sectors || displayData.sample_sectors || [];
   const accesses = scheduleData?.accesses || [];
@@ -115,9 +102,14 @@ export default function ScheduleDashboard({
   const contractMap = useMemo(() => {
     return new Map(contracts.map(c => [c.contract_number, c]));
   }, [contracts]);
+  useEffect(() => {
+    if (!highlightedJobId) return;
+    const highlighted = activities.find((activity) => activity.activity_id === highlightedJobId);
+    if (highlighted) setSelectedActivity(highlighted);
+  }, [highlightedJobId, activities]);
 
   // 2. Real-Time AGENTS.md Conflict Evaluation
-  const conflictReport = useMemo(() => {
+  const preliminaryConflictReport = useMemo(() => {
     return evaluateScheduleConflicts({
       accesses,
       occupancies,
@@ -128,6 +120,18 @@ export default function ScheduleDashboard({
       activeWeek,
     });
   }, [accesses, occupancies, activities, contracts, locationsList, currentScenario, activeWeek]);
+  const conflictReport = useMemo(() => {
+    if (!authoritativeConflicts.length) return preliminaryConflictReport;
+    const activityConflicts = new Map();
+    authoritativeConflicts.forEach((finding) => {
+      const id = finding.job_id || finding.activity_id;
+      if (!id) return;
+      const rows = activityConflicts.get(id) || [];
+      rows.push({ rule: finding.rule, message: finding.detail });
+      activityConflicts.set(id, rows);
+    });
+    return { hasConflicts: true, totalConflicts: authoritativeConflicts.length, activityConflicts };
+  }, [authoritativeConflicts, preliminaryConflictReport]);
 
   // 3. Compute Valid Drop Targets when dragging a job
   const validDropTargets = useMemo(() => {
@@ -292,28 +296,13 @@ export default function ScheduleDashboard({
     setDragOverCell(null);
   };
 
-  // 6. Reschedule with Solver (Reset to baseline)
+  // Restore the immutable projection currently selected by the planning context.
   const handleReschedule = async () => {
     setIsRescheduling(true);
-    try {
-      const fresh = await rescheduleWithSolver(currentScenario);
-      if (fresh) {
-        setScheduleData(fresh);
-        setSolverBaseline(JSON.parse(JSON.stringify(fresh)));
-        setManualMoveHistory([]);
-        showToast(`✓ Reset to optimal solver baseline for Scenario ${currentScenario} (0 conflicts, 100% complete)`);
-      }
-    } catch (err) {
-      if (solverBaseline) {
-        setScheduleData(JSON.parse(JSON.stringify(solverBaseline)));
-        setManualMoveHistory([]);
-        showToast(`✓ Restored to cached baseline for Scenario ${currentScenario}`);
-      } else {
-        showToast(`Solver reset failed: ${err.message}`);
-      }
-    } finally {
-      setIsRescheduling(false);
-    }
+    if (solverBaseline) setScheduleData(JSON.parse(JSON.stringify(solverBaseline)));
+    setManualMoveHistory([]);
+    showToast(`Restored active ${displayData.identity?.mode || ''} schedule identity`);
+    setIsRescheduling(false);
   };
 
   // Undo manual move
@@ -336,6 +325,11 @@ export default function ScheduleDashboard({
         className="schedule-controls border-b border-slate-800 bg-slate-950 px-6 py-3 flex flex-wrap items-center justify-between gap-4"
         aria-label="Schedule matrix controls"
       >
+        <div className="text-[10px] font-mono text-slate-500" title="Authoritative active schedule identity">
+          {displayData.identity?.mode === 'requirements'
+            ? `Run ${displayData.identity.runId} · Revision ${displayData.identity.instanceRevisionId}`
+            : `Baseline ${displayData.identity?.baselineId} r${displayData.identity?.baselineRevision}${displayData.identity?.runId ? ` · Candidate ${displayData.identity.runId}` : ' · Accepted'}`}
+        </div>
         {/* Planning Horizon Scrubber */}
         <div className="flex items-center bg-slate-900 border border-slate-800 rounded-xl p-1 shadow-inner">
           <button
@@ -380,12 +374,12 @@ export default function ScheduleDashboard({
             onClick={handleReschedule}
             disabled={isRescheduling}
             className="bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-400 hover:to-blue-500 text-slate-950 font-black text-xs px-3.5 py-1.5 rounded-lg flex items-center gap-2 shadow-lg shadow-cyan-500/20 transition transform active:scale-95 disabled:opacity-50 cursor-pointer"
-            title="Re-run CP-SAT solver and restore pristine schedule"
+            title="Discard local draft moves and restore the active persisted schedule"
           >
             {isRescheduling ? (
               <><RefreshCw size={14} className="animate-spin" /> Solving...</>
             ) : (
-              <><Sparkles size={14} /> Reschedule with Solver</>
+              <><Sparkles size={14} /> Restore Active Schedule</>
             )}
           </button>
 
@@ -434,6 +428,18 @@ export default function ScheduleDashboard({
           </div>
         </div>
       </div>
+
+      {scheduleData?.diff && (
+        <div className="border-b border-cyan-900 bg-cyan-950/30 px-6 py-2 text-xs text-cyan-200">
+          <strong>Candidate diff:</strong> {scheduleData.diff.disruption.changed_existing_jobs} existing jobs changed · {scheduleData.diff.disruption.total_absolute_service_date_displacement} total days displaced · operational scenario cost {scheduleData.diff.scenarioCost.objective_points}
+        </div>
+      )}
+
+      {scheduleData?.maintenance?.filter((visit) => visit.week === activeWeek).length > 0 && (
+        <div className="border-b border-amber-800 bg-amber-950/40 px-6 py-2 text-xs text-amber-200">
+          <strong>Maintenance:</strong> {scheduleData.maintenance.filter((visit) => visit.week === activeWeek).map((visit) => `${visit.visit_id} · ${visit.service_date}`).join(' | ')}
+        </div>
+      )}
 
       {/* ========================================================================= */}
       {/* 2. REAL-TIME CONFLICT STATUS BANNER */}
@@ -573,11 +579,11 @@ export default function ScheduleDashboard({
                           }`}
                         >
                           <div className="font-bold flex items-center justify-center gap-1">
-                            {night.label} Night (N{night.id})
+                            {night.label} (N{night.id})
                             {night.isEclo && <Zap size={12} className="text-amber-400 fill-amber-400" />}
                           </div>
                           <div className="text-[10px] text-slate-500 font-normal">
-                            Access @ {night.time} HRS
+                            Contract/type weekly index — not a weekday
                           </div>
                         </th>
                       ))}

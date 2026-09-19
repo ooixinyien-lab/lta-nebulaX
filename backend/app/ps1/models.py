@@ -14,6 +14,10 @@ from backend.app.domain_models import (
     PS1Base,
     ScenarioResultRow,
 )
+from backend.app.ps1.calendar_models import (
+    CalendarAssignment,
+    CalendarValidationSummary,
+)
 
 
 class Scenario(str, Enum):
@@ -172,6 +176,7 @@ class PS1SolveOptions(PS1Base):
     random_seed: int = 0
     optimize: bool = True
     log_search_progress: bool = False
+    enforce_exact_planned_start_date: bool = False
 
 
 class PS1SolveResult(PS1Base):
@@ -183,6 +188,10 @@ class PS1SolveResult(PS1Base):
     access_rows: list[AccessScheduleRow] = Field(default_factory=list)
     occupancy_rows: list[OccupancyScheduleRow] = Field(default_factory=list)
     contract_results: list[ScenarioResultRow] = Field(default_factory=list)
+    calendar_assignments: list[CalendarAssignment] = Field(default_factory=list)
+    calendar_validation: CalendarValidationSummary | None = None
+    calendar_assumed: bool = False
+    calendar_assumptions: list[str] = Field(default_factory=list)
     score: ScoreBreakdown | None = None
     eclo_summary: ECLOSummary | None = None
     validation: ValidationSummary

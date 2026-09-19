@@ -21,7 +21,7 @@ class Settings(BaseSettings):
     database_path: str = str(ROOT / "backend" / "nebulax.sqlite3")
     dataset_path: str = str(ROOT / "data" / "comprehensive_synthetic_data.json")
     official_data_path: str = str(ROOT / "data")
-    actual_nights_output_dir: Path = ROOT / "nights_outputs_mocked"
+    actual_nights_output_dir: Path = ROOT / "outputs"
     actual_nights_scenario: Literal["A", "B", "C"] = "A"
     supabase_url: str = ""
     supabase_publishable_key: str = ""

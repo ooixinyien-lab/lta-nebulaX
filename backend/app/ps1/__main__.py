@@ -7,6 +7,7 @@ import json
 from pathlib import Path
 
 from backend.app.io import load_problem_from_directory
+from backend.app.ps1.calendar_models import OperatingCalendarInput
 from backend.app.ps1.models import PS1SolveOptions, Scenario
 from backend.app.ps1.solver import export_solve_result, solve_all_scenarios, solve_ps1
 
@@ -16,6 +17,7 @@ def _parser() -> argparse.ArgumentParser:
     parser.add_argument("--data-dir", type=Path, default=Path("data"))
     parser.add_argument("--scenario", choices=["A", "B", "C", "all"], default="all")
     parser.add_argument("--output-dir", type=Path, required=True)
+    parser.add_argument("--calendar", type=Path, default=None, help="Optional operating calendar JSON file")
     parser.add_argument("--time-limit", type=float, default=60.0)
     parser.add_argument("--feasibility-time-limit", type=float, default=10.0)
     parser.add_argument("--workers", type=int, default=8)
@@ -35,12 +37,16 @@ def main() -> int:
         optimize=not args.no_optimize,
     )
 
+    calendar = None
+    if args.calendar:
+        calendar = OperatingCalendarInput.model_validate_json(args.calendar.read_text(encoding="utf-8"))
+
     if args.scenario == "all":
-        results = solve_all_scenarios(problem, options, args.output_dir)
+        results = solve_all_scenarios(problem, options, args.output_dir, calendar=calendar)
         payload = {scenario.value: result.model_dump(mode="json") for scenario, result in results.items()}
     else:
         scenario = Scenario(args.scenario)
-        result = solve_ps1(problem, scenario, options)
+        result = solve_ps1(problem, scenario, options, calendar=calendar)
         if result.has_incumbent:
             export_solve_result(result, args.output_dir / scenario.value)
         payload = result.model_dump(mode="json")

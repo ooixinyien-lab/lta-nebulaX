@@ -507,9 +507,9 @@ def test_assign_scenario_toggle_and_context_filtering(client, tmp_path):
 
 
 @pytest.mark.parametrize("scenario,expected_access_count", [
-    ("A", 114),
-    ("B", 104),
-    ("C", 91),
+    ("A", 192),
+    ("B", 189),
+    ("C", 192),
 ])
 def test_mocked_outputs_produce_feasible_calendar_for_all_scenarios(
     client, scenario, expected_access_count

@@ -132,6 +132,13 @@ class CalendarConflict(PS1Base):
     available_capacity: int | None = None
 
 
+class DatedAccessDecision(PS1Base):
+    activity_id: str
+    service_date: date
+    week: int
+    eclo: bool
+
+
 class CalendarAssignment(PS1Base):
     access_id: str
     activity_id: str

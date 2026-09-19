@@ -64,7 +64,7 @@ export const loadMapSchedule = (identity, week, signal) => requestJson(
   `/api/ps1/schedules/project?${identityParams(identity, week)}`, { signal },
 );
 
-export async function solveRequirements(identity, timeLimitSeconds = 30) {
+export async function solveRequirements(identity, timeLimitSeconds = 600) {
   return requestJson("/api/ps1/solve", {
     method: "POST", headers: JSON_HEADERS,
     body: JSON.stringify({

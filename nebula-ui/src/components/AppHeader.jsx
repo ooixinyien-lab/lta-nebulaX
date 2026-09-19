@@ -9,26 +9,33 @@ const NAV_ITEMS = [
 export default function AppHeader({ activeTab, onNavigate, mode, scenario, onModeChange, onScenarioChange, onAddJob, onSolve, onAccept, solving, hasCandidate, solveDisabled = false }) {
   return (
     <header className="app-header bg-slate-950/90 border-b border-slate-800/80 px-4 py-2 flex flex-wrap items-center justify-between gap-3 text-xs">
-      <nav className="flex min-w-0 items-center gap-4 overflow-x-auto" aria-label="Primary navigation">
-        {NAV_ITEMS.map(({ id, label, icon: Icon }, index) => (
-          <React.Fragment key={id}>
-            {index > 0 && <span className="shrink-0 text-slate-600" aria-hidden="true">|</span>}
-            <button
-              type="button"
-              onClick={() => onNavigate(id)}
-              aria-current={activeTab === id ? 'page' : undefined}
-              className={`flex shrink-0 items-center gap-1.5 transition ${
-                activeTab === id
-                  ? 'font-bold text-cyan-400'
-                  : 'text-slate-400 hover:text-slate-200'
-              }`}
-            >
-              <Icon size={13} />
-              {label}
-            </button>
-          </React.Fragment>
-        ))}
-      </nav>
+      <div className="flex items-center gap-4">
+        <div className="flex items-center gap-1.5 font-black text-sm tracking-wider text-cyan-400 select-none">
+          <span className="bg-cyan-500 text-slate-950 text-[10px] font-black px-1.5 py-0.5 rounded tracking-normal">FR</span>
+          <span>ForRail</span>
+        </div>
+        <span className="text-slate-700 select-none" aria-hidden="true">|</span>
+        <nav className="flex min-w-0 items-center gap-4 overflow-x-auto" aria-label="Primary navigation">
+          {NAV_ITEMS.map(({ id, label, icon: Icon }, index) => (
+            <React.Fragment key={id}>
+              {index > 0 && <span className="shrink-0 text-slate-600" aria-hidden="true">|</span>}
+              <button
+                type="button"
+                onClick={() => onNavigate(id)}
+                aria-current={activeTab === id ? 'page' : undefined}
+                className={`flex shrink-0 items-center gap-1.5 transition ${
+                  activeTab === id
+                    ? 'font-bold text-cyan-400'
+                    : 'text-slate-400 hover:text-slate-200'
+                }`}
+              >
+                <Icon size={13} />
+                {label}
+              </button>
+            </React.Fragment>
+          ))}
+        </nav>
+      </div>
       <div className="flex flex-wrap items-center gap-2" aria-label="Planning controls">
         <div className="flex rounded-lg border border-slate-700 bg-slate-900 p-0.5" role="group" aria-label="Planning mode">
           {[['requirements', 'PS1 Requirements'], ['operations', 'Operations Mode']].map(([value, label]) => (

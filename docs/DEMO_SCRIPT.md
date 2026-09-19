@@ -1,4 +1,4 @@
-# NebulaX Demonstration Script
+# ForRail Demonstration Script
 
 > [!IMPORTANT]
 > **AUTHORITATIVE SOURCE OF TRUTH: [PS1_OFFICIAL_ADOPTION_PLAN.md](../PS1_OFFICIAL_ADOPTION_PLAN.md)**  

@@ -5,7 +5,8 @@ import {
   solveOperations, solveRequirements, uploadOfficialInstance,
 } from "../services/planningApi";
 
-const STORAGE_KEY = "nebulax-planning-context-v1";
+const STORAGE_KEY = "forrail-planning-context-v1";
+const LEGACY_STORAGE_KEY = "nebulax-planning-context-v1";
 const EMPTY = {
   mode: "requirements", scenario: "A",
   requirements: { A: null, B: null, C: null },
@@ -69,7 +70,7 @@ export function reconcilePlanningState(current, catalog) {
 }
 
 const readSaved = () => {
-  try { return { ...EMPTY, ...JSON.parse(localStorage.getItem(STORAGE_KEY) || "{}") }; }
+  try { return { ...EMPTY, ...JSON.parse(localStorage.getItem(STORAGE_KEY) || localStorage.getItem(LEGACY_STORAGE_KEY) || "{}") }; }
   catch { return EMPTY; }
 };
 
@@ -200,6 +201,7 @@ export function PlanningProvider({ children }) {
   const clearDatabase = async () => {
     await clearPlanningDatabase();
     localStorage.removeItem(STORAGE_KEY);
+    localStorage.removeItem(LEGACY_STORAGE_KEY);
     setState(EMPTY); setCatalog(null); setSchedule(null); setConflicts([]); setError(null); setHighlightedJobId(null);
     await refreshCatalog();
   };

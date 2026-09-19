@@ -1,8 +1,8 @@
-# NebulaX Testing and Verification Report
+# ForRail Testing and Verification Report
 
 > [!IMPORTANT]
 > **AUTHORITATIVE SOURCE OF TRUTH: [PS1_OFFICIAL_ADOPTION_PLAN.md](../PS1_OFFICIAL_ADOPTION_PLAN.md)**  
-> This report documents testing verification for NebulaX.
+> This report documents testing verification for ForRail.
 > Per [PS1_OFFICIAL_ADOPTION_PLAN.md](../PS1_OFFICIAL_ADOPTION_PLAN.md):
 > - **Synthetic test success does not certify PS1 correctness.** The 135 passing tests below verify only the historical single-night synthetic prototype.
 > - The synthetic solver's recovery behavior (scheduling 7 of 12 requests) violates PS1's mandatory complete-workload requirement.

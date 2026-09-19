@@ -1,6 +1,6 @@
 # Schedule insertion and low-churn replanning
 
-NebulaX's operational schedule-insertion workflow lives under
+ForRail's operational schedule-insertion workflow lives under
 `backend/app/schedule_insertion/`. It is additive to the official PS1 solver:
 the existing weekly solver, validation, scoring and exact three-CSV export
 paths are not imported as execution engines and are not changed by this

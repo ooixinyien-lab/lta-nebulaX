@@ -1,6 +1,6 @@
-# AGENTS.md — AI Agent Operating Guide for NebulaX
+# AGENTS.md — AI Agent Operating Guide for ForRail
 
-Welcome to **NebulaX**, the rail maintenance scheduling engine built for the Land Transport Authority (LTA) challenge.
+Welcome to **ForRail**, the rail maintenance scheduling engine built for the Land Transport Authority (LTA) challenge.
 
 This document serves as the operational handbook and single entry point for AI coding agents interacting with this repository. It establishes project context, authoritative constraints, architectural standards, development workflows, and strict behavioral guardrails.
 
@@ -8,7 +8,7 @@ This document serves as the operational handbook and single entry point for AI c
 
 ## 1. Project Overview & Mission
 
-NebulaX is an enterprise-grade railway possession and maintenance scheduling system targeting **first place in Problem Statement 1 (PS1)**.
+ForRail is an enterprise-grade railway possession and maintenance scheduling system targeting **first place in Problem Statement 1 (PS1)**.
 
 ### Core Order of Priorities
 1. **100% Workload Satisfaction:** Every activity's full workload must be scheduled ($\sum_w (2 x_{iw} + e_{iw}) \ge 2 d_i$). Dropping, deferring, or truncating activities is strictly prohibited.

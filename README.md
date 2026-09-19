@@ -1,314 +1,374 @@
-# NebulaX — PS1 Official Rail Maintenance Scheduling System
+# ForRail — PS1 Official Rail Maintenance Scheduling & Operations Engine
+
+[![Python 3.12+](https://img.shields.io/badge/python-3.12+-blue.svg)](https://www.python.org/downloads/)
+[![Google OR-Tools CP-SAT](https://img.shields.io/badge/solver-OR--Tools%20CP--SAT-red.svg)](https://developers.google.com/optimization/cp/cp_solver)
+[![React 19](https://img.shields.io/badge/frontend-React%2019%20%2B%20Vite-cyan.svg)](https://vitejs.dev/)
+[![FastAPI](https://img.shields.io/badge/backend-FastAPI-green.svg)](https://fastapi.tiangolo.com/)
+[![SQLite WAL](https://img.shields.io/badge/persistence-SQLite%20WAL-lightgrey.svg)](https://www.sqlite.org/wal.html)
 
 > [!IMPORTANT]
 > **AUTHORITATIVE SOURCE OF TRUTH: [PS1_OFFICIAL_ADOPTION_PLAN.md](PS1_OFFICIAL_ADOPTION_PLAN.md)**  
-> This repository is adopting the official **Problem Statement 1 (PS1)** challenge requirements.
-> [PS1_OFFICIAL_ADOPTION_PLAN.md](PS1_OFFICIAL_ADOPTION_PLAN.md) acts as the **single authoritative source of truth** for all optimisation, data, backend, and API specifications.
+> **ForRail** is the official rail maintenance possession scheduling and operations engine built for the Land Transport Authority (LTA) challenge.
 >
-> **Core Strategy:** Keep NebulaX's robust application infrastructure (FastAPI, identity/role auth, transaction/audit controls) and replace the legacy synthetic, single-night scheduling model with the official PS1 model of multi-week accesses (30-week horizon), location possessions, and 100% complete activity workloads across Scenarios A, B, and C.
->
-> The legacy single-night CP-SAT solver (`cp_sat.py`), synthetic validator (`full_validator.py`), and `constraints_lp_setup.md` are **retired from the official PS1 path** and retained solely as historical learning and scaffolding artifacts.
-
-**Target:** First place in PS1.  
-**Order of Priorities:**
-1. Schedule every activity's full workload (100% complete, mandatory).
-2. Satisfy every official hard rule.
-3. Minimise the official penalty on hidden instances.
-4. Handle Scenarios A, B, and C correctly.
-5. Solve reliably within a bounded runtime.
-6. Deliver exact global-night dispatch, recurring maintenance, low-churn dynamic replanning, safe manual edits, and grounded chatbot explanations.
+> [PS1_OFFICIAL_ADOPTION_PLAN.md](PS1_OFFICIAL_ADOPTION_PLAN.md) acts as the **single authoritative source of truth** for all mathematical models, data contracts, and scoring logic.
 
 ---
 
-## Overview: Transition from Legacy Prototype to Official PS1
+## 1. Executive Summary & Mission
 
-NebulaX originally provided a runnable synthetic maintenance-scheduling prototype with a requester portal, an officer workspace, and a single-night CP-SAT solver. As detailed in [PS1_OFFICIAL_ADOPTION_PLAN.md](PS1_OFFICIAL_ADOPTION_PLAN.md), the repository is transitioning to the official PS1 domain:
+**Target:** First place in Problem Statement 1 (PS1).
 
-| Dimension | Legacy Synthetic Prototype (Retired from PS1 path) | Official PS1 Architecture (Authoritative) |
-|---|---|---|
-| **Horizon** | Single engineering night (minute-level grid) | 30-week planning horizon (`W = 1..30`) |
-| **Decisions** | Minute timestamps, engineer assignments, equipment | Weekly accesses (`x_iw`), ECLO (`e_iw`), local night (`z_iwn`), possession groups (`y_iwlg`) |
-| **Workload** | Dropping/deferring jobs permitted (e.g. 7 of 12 scheduled) | **100% complete workload mandatory** (`sum_w(2*x_iw + e_iw) >= 2*d_i`) |
-| **Resources** | Synthetic technicians, named engineers, vehicles | Contract weekly caps ($K_c$), workfronts ($f_c$), location possession capacity ($s_lw$) |
-| **Scenarios** | Single strict vs recovery mode | **Scenarios A (strict supply), B (strict dates), C (balanced)** |
-| **Inputs** | `comprehensive_synthetic_data.json` | **8 Official CSVs** (`01_LINES.csv` ... `08_ACTIVITY_DETAILS.csv`) |
-| **Exports** | SQLite database rows / JSON API | **3 Official CSVs** (`SCHEDULE_ACCESS.csv`, `SCHEDULE_OCCUPANCY.csv`, `RESULTS.csv`) |
-| **Solver Path** | `backend/app/services/cp_sat.py` (Historical) | Canonical data in `domain_models.py`/`io.py`/`topology.py`; solver, scoring, validation and artifacts in `backend/app/ps1/` |
-| **Operational Detail** | Synthetic minute timestamps | Separate exact-date calendarisation, recurrence and replan layers; never infer weekdays from official `access_night` |
+### Core Order of Priorities
+1. **100% Workload Satisfaction:** Every single activity's full demand is scheduled ($\sum_w (2 x_{iw} + e_{iw}) \ge 2 d_i$). Dropping, deferring, or truncating activities is strictly forbidden.
+2. **Zero Official Hard Violations:** Strict mathematical enforcement of physical track capacity, legal possession mixing, directional line topology, and protection buffer footprints.
+3. **Official Score Minimisation:** Minimise exact penalties on test instances across:
+   - Weighted activity lateness ($P$), summed per activity against its contract's `planned_completion_date`.
+   - Excess possession slot count ($V$), charged at 7 points per slot in Scenarios B and C.
+   - Early Closure / Late Opening (ECLO) access count ($E$), charged at 5 points per access in Scenarios B and C.
+4. **Scenario Policies:** Exact compliance across:
+   - **Scenario A (Strict Supply):** Supply is hard-capped ($V = 0$), ECLO forbidden ($E = 0$); minimise lateness $P$.
+   - **Scenario B (Strict Schedule):** Zero contract overrun permitted ($P = 0$); minimise supply excess and ECLO ($7V + 5E$).
+   - **Scenario C (Balanced Trade-Off):** Max 1 excess slot per location-week ($v_{lw} \le 1$), line ECLO windows capped at $\le 2$ consecutive weeks; minimise $P + 7V + 5E$.
+5. **Operational Enterprise Excellence:** Exact Singapore calendar dispatch, ad-hoc/emergency injection, low-churn dynamic replanning, preflight conflict detection, and grounded AI decision support.
 
 ---
 
-## Start here
+## 2. System Architecture & Capabilities
 
-The existing web UI demonstrates the application infrastructure:
-**One website. One login system. Two roles.**
+```text
+┌──────────────────────────────────────────────────────────────────────────────────┐
+│                             FORRAIL APPLICATION SHELL                            │
+└──────────────────────────────────────────────────────────────────────────────────┘
+            │                                                      │
+            ▼                                                      ▼
+┌───────────────────────────────┐              ┌───────────────────────────────────┐
+│     PS1 REQUIREMENTS VIEW     │              │       OPERATIONS MODE VIEW        │
+│          (For Judges)         │              │      (Real-World Operations)      │
+├───────────────────────────────┤              ├───────────────────────────────────┤
+│ • Official 8-CSV Ingestion    │              │ • Immutable Baseline Revisions    │
+│ • CP-SAT Math Optimisation    │              │ • Ad-hoc / Emergency Additions    │
+│ • Scenarios A, B, and C       │              │ • Real-time Conflict Preflight    │
+│ • Interactive SVG Network Map │              │ • Dynamic Low-Churn Auto-Solve    │
+│ • Possession Dispatch Board   │              │ • Schedule Diff & Displacement    │
+│ • Exact 3-CSV Output Export   │              │ • Grounded Gemini AI Explainer    │
+└───────────────────────────────┘              └───────────────────────────────────┘
+            │                                                      │
+            └──────────────────────┬───────────────────────────────┘
+                                   ▼
+┌──────────────────────────────────────────────────────────────────────────────────┐
+│                              FASTAPI BACKEND ENGINE                              │
+├──────────────────────────────────────────────────────────────────────────────────┤
+│ • app/domain_models.py : Pydantic v2 strict schemas with extra="forbid"          │
+│ • app/topology.py      : 2k+1 graph invariants, Live mirroring & buffer clamping │
+│ • app/ps1/solver.py    : Google OR-Tools CP-SAT multi-criteria solver            │
+│ • app/ps1/scoring.py   : Independent penalty reconstruction and score auditing   │
+│ • app/ps1/validation.py: Independent validator for physical & scenario rules     │
+│ • app/database.py      : SQLite WAL with atomic transactions & revision counters │
+│ • app/integrations/    : Gemini API schedule explainer with read-only fact packs │
+└──────────────────────────────────────────────────────────────────────────────────┘
+```
 
-- A **requester** submits work and sees their own requests/bookings.
-- An **officer** sees all requests, checks conflicts, generates a proposal, and approves/publishes it.
+### Key Highlights
+- **Mathematical Soundness:** Built directly with Google OR-Tools CP-SAT. Schedules 192 workload units with 100% completeness.
+- **Topological Invariants:** Enforces the $2k+1$ graph invariant across $k$ stations and $k-1$ sequential sectors, Live opposite-bound closure mirroring, and cross-line interchange protection (ALP & BET lines).
+- **Possession Group Co-sharing:** Enforces legal co-sharing rules (1 PM alone, 1 PC + $\le 3$ C, or $\le 4$ C; never 2 PCs) within location-week scopes.
+- **Dual-Bound Interactive Map:** High-performance SVG interactive canvas showing stations, sector links, buffer expansions, and active workfronts with pan/zoom controls.
 
-The API enforces these permissions; hiding a button is not the permission check. In local demo mode the identities are deliberately simulated, so anyone with local access can select the officer. Do not expose demo mode publicly.
+---
 
-New UI work belongs in **`nebula-ui/` (React + Vite)**. The legacy `frontend/` is still served at `/` during transition; do not add the new scheduling workflow there. FastAPI owns all scheduling, validation, conflict and explanation facts.
+## 3. Quickstart & Installation
 
-## 1. Run it on your laptop
+### Prerequisites
+- **Python 3.12+** (recommended)
+- **Node.js 18+** (for frontend development/build)
 
-Use **Python 3.12** for the most straightforward team setup. The build environment used Python 3.13.5; this repository has not been verified on every Python/OS combination.
+### 1. Setup Backend Environment
 
-Open the **NebulaX repository** in VS Code, then open its terminal. The terminal's current directory must contain this README and `requirements.txt`.
+```bash
+# Clone and enter directory
+cd lta-nebulaX
 
-### macOS / Linux
-
-```sh
+# Create and activate virtual environment
 python3 -m venv .venv
-source .venv/bin/activate
+source .venv/bin/activate       # On Windows: .venv\Scripts\activate
+
+# Install dependencies
 python -m pip install -r requirements-cpsat.txt
+python -m pip install -r requirements-dev.txt
+
+# Copy environment configuration
 cp .env.example .env
+```
+
+### 2. Start the Application
+
+You can launch the backend and frontend in two easy ways:
+
+#### Option A: Quick Dev Script (Recommended)
+```bash
+sh scripts/dev.sh
+```
+
+#### Option B: Separate Backend & Frontend Processes
+
+**Terminal 1 (Backend - FastAPI):**
+```bash
+source .venv/bin/activate
 python -m uvicorn backend.app.main:app --reload --host 127.0.0.1 --port 8000
 ```
 
-### Windows PowerShell
-
-```powershell
-py -3.12 -m venv .venv
-.\.venv\Scripts\python.exe -m pip install -r requirements-cpsat.txt
-Copy-Item .env.example .env
-.\.venv\Scripts\python.exe -m uvicorn backend.app.main:app --reload --host 127.0.0.1 --port 8000
-```
-
-Open **http://127.0.0.1:8000** in your browser. Interactive backend API documentation is at **http://127.0.0.1:8000/docs**.
-
-Startup creates or safely upgrades one local SQLite database at `DATABASE_PATH` (default `backend/nebulax.sqlite3`) and validates/imports all eight official CSVs from `OFFICIAL_DATA_PATH` (default `data`). Matching bundles are reused; changed bundles create new snapshots without resetting runs or plans. Missing or invalid required CSVs stop startup with an error. Python's built-in `sqlite3` is the only database runtime; no database server or migration command is required. See [persistence and compatibility](docs/DATABASE.md).
-
-Synthetic JSON is not loaded during PS1 startup. The legacy API currently cannot import the deleted `backend.app.models` module, a limitation already present at compatibility baseline `c156c5a`. Startup logs this limitation and serves the separate PS1 API. The legacy workflow below is historical, not a working fresh-start workflow.
-
-Leave the terminal running while you use the app. Press `Ctrl+C` to stop it. After the first setup, run `sh scripts/dev.sh` on macOS/Linux or `./scripts/dev.ps1` in PowerShell.
-
-For modern UI development, run Vite separately:
-
-```sh
+**Terminal 2 (Frontend - Vite / React 19):**
+```bash
 cd nebula-ui
 npm install
 npm run dev
 ```
 
-Vite serves `http://127.0.0.1:5173` and proxies `/api` to FastAPI. For a production-style check, run `npm run build`; FastAPI serves the built app at `/network-map` when `nebula-ui/dist/` exists.
+- **Modern Interactive App:** Open [http://127.0.0.1:5173](http://127.0.0.1:5173) (Vite proxies `/api` calls directly to port 8000).
+- **Backend API & Swagger Docs:** Open [http://127.0.0.1:8000/docs](http://127.0.0.1:8000/docs).
+- **Production Bundle (FastAPI-served):** Running `npm run build` inside `nebula-ui/` compiles the app to `nebula-ui/dist/`, which FastAPI automatically serves at [http://127.0.0.1:8000/network-map](http://127.0.0.1:8000/network-map) or [http://127.0.0.1:8000/](http://127.0.0.1:8000/).
 
-### Map fixed solver outputs to actual nights
+---
 
-The calendar layer reads an existing `SCHEDULE_ACCESS.csv`,
-`SCHEDULE_OCCUPANCY.csv` and `RESULTS.csv` together with their matching official
-instance revision. It stores the original bytes unchanged and writes exact
-`service_date` values to separate operational records.
+## 4. Step-by-Step Guide for Judges: PS1 Requirements View
 
-1. Start FastAPI and the Vite UI as above, then open
-   `http://localhost:5173/calendar` or choose **Actual Night View**.
-2. The page presents a clean, zero-input interface scoped to the **Planning officer**
-   with the automatic solver output source (defaults to `/outputs/A`). Any previously
-   completed date mapping is restored automatically on page load.
-3. Choose **Assign actual nights**. The server resolves the configured scenario output
-   directory, binds the three CSVs to the seeded official instance revision, validates the
-   fixed weekly schedule, automatically sets up or reuses the assumed demo operating
-   calendar, and queues CP-SAT actual night optimization in a single click. No file
-   pickers, revision fields, or multi-step setup buttons are required.
+This walkthrough guides judges through testing any custom 8-file PS1 dataset, running the CP-SAT optimisation engine, visually verifying constraints on the interactive map, and exporting the exact official 3-CSV bundle.
 
-Refreshing the page restores stored results; it does not rerun the solver.
-The read-only week view appears when every fixed source access receives a
-validated date. Otherwise the page displays the returned conflicts while preserving
-all source CSV files and weekly scheduling decisions unchanged.
+```
+┌─────────────────────────────────────────────────────────────────────────────────┐
+│                           PS1 JUDGE VERIFICATION FLOW                           │
+│                                                                                 │
+│  [1. Ingestion]       [2. Select Mode]     [3. Solve Engine]    [4. Verification]     [5. Export]      │
+│  Upload 8 CSVs   ───►  PS1 Requirements ───► Solve All      ───► Interactive Map ───► Download 3 CSVs  │
+│  & Validate DB         Scenario A/B/C       CP-SAT 100%          & Dispatch Board     Official Bundle  │
+└─────────────────────────────────────────────────────────────────────────────────┘
+```
 
-For standalone queue processing or recovery after an interrupted server process,
-the optional worker remains available as
-`python -m backend.app.ps1.calendar_worker --once`. A fixed weekly schedule can
-be impossible under a selected operating calendar; the API then returns
-conflicts and leaves all official rows and files unchanged. `access_night`
-remains a local contract index and is displayed separately from the weekday.
+### Step 1: Open the Application & Navigate to Data Ingestion
+1. Open [http://localhost:5173](http://localhost:5173) (or [http://localhost:8000](http://localhost:8000)) in your browser.
+2. Click **Data Ingestion** in the top navigation bar.
 
-## 2. Historical legacy synthetic workflow
+### Step 2: Upload Your Custom 8-File PS1 Bundle
+1. In the **Data Ingestion** panel, click **Browse CSV Files** (or drag and drop your files).
+2. Select your 8 official PS1 input CSVs:
+   - `01_LINES.csv`
+   - `02_STATIONS.csv`
+   - `03_SECTORS.csv`
+   - `04_LOCATION_SUPPLY.csv`
+   - `05_BUFFER_LOCATION.csv`
+   - `06_PARAMETERS.csv`
+   - `07_PROJECT_DETAILS.csv`
+   - `08_ACTIVITY_DETAILS.csv`
+3. The real-time file checklist will turn green for all 8 files.
+4. Click **Populate Database**.
+   - *What happens:* ForRail checks relational foreign keys, validates acyclicity (DAG) of predecessor dependencies, enforces $2k+1$ topology invariants, and stores the raw bytes with a cryptographic SHA-256 fingerprint.
 
-This sequence documents the retired prototype and is not a runnable current-main walkthrough while `backend.app.models` is absent:
+*(Note: To reset and test another dataset at any time, click **Clear Database** in the Danger Zone).*
 
-1. Choose **Planning officer**. A fresh canonical database contains the 12 comprehensive synthetic requests.
-2. Click **Generate proposal**. The legacy full solver first attempts a complete strict schedule, then runs recovery only if strict infeasibility is proved.
-3. Review the returned status, scheduled work and clearly separated deferred requests. The canonical 14 September night proves strict infeasibility and returns an independently validated seven-request recovery plan.
-   *(Note: As established in [PS1_OFFICIAL_ADOPTION_PLAN.md](PS1_OFFICIAL_ADOPTION_PLAN.md), deferring 5 of 12 requests violates the official PS1 complete-workload baseline, which mandates scheduling 100% of all activities across the multi-week horizon).*
-4. Click **Approve & publish**, then accept the confirmation. The server rechecks the current revision and writes all bookings in a transaction.
-5. Sign out. Choose **Track team**. The requester sees only that team's requests and its newly scheduled work.
-6. Choose **New request**, submit a work package, and refresh.
+### Step 3: Switch to PS1 Requirements Mode & Choose Scenario
+1. Navigate back to **Dashboard** using the top navigation bar.
+2. In the top header controls, ensure **PS1 Requirements** is selected (this is the default evaluation view for judges).
+3. Select your scenario policy by clicking **A**, **B**, or **C**:
+   - **Scenario A (Strict Supply):** Supply is hard-capped by `04_LOCATION_SUPPLY.csv` ($V = 0$) and ECLO is strictly forbidden ($E = 0$). Objective: minimise planned lateness penalty $P$.
+   - **Scenario B (Strict Schedule):** Every activity must complete on or before its contract's planned completion date ($P = 0$, zero overrun). Flexible supply and ECLO accesses permitted. Objective: minimise $7V + 5E$.
+   - **Scenario C (Balanced Trade-Off):** Lateness permitted, at most 1 excess slot per location-week ($v_{lw} \le 1$), ECLO allowed within a maximum 2-week window per line. Objective: minimise $P + 7V + 5E$.
 
-The canonical fixture covers **14-15 September 2026** for the legacy synthetic demonstration.
+### Step 4: Run the CP-SAT Optimisation Engine
+1. Click **Solve All Scenarios** (or solve the active scenario).
+2. The solver button will show **Solving…** while Google OR-Tools CP-SAT executes in the background.
+3. The solver:
+   - Guarantees **100% full workload completion** across all activities.
+   - Enforces legal possession co-sharing groups.
+   - Computes protection buffers (Live 2, Consist 1, Others 0), Live opposite-bound mirroring, and interchange platform protection.
+   - Optimises the scenario penalty objective directly.
+4. Upon completion, the interactive schedule dashboard immediately renders.
 
-## 3. Team ownership and milestones (per PS1 Adoption Plan)
+### Step 5: Visual Verification on the Interactive Network Map
+1. **Interactive SVG Network Map:**
+   - Explore the topological rail projection of Singapore's fictional corridor (**ALP** and **BET** lines).
+   - Use the **Week Slider** (Weeks 1 to 30) or the timeline dots to jump between weeks.
+   - Hover over stations and sectors to see active possessions, track directions, and spatial allocations.
+   - Use **Layer Controls** to toggle:
+     - **Workfronts:** Highlights sectors with active engineering work.
+     - **Buffer Zones:** Displays the protective buffer expansions around active worksites.
+     - **Crossover Links:** Shows dual-line interchange connections (H01, H02) where Live work triggers cross-line platform protection.
+     - **Station Labels & Grid Lines:** Adjusts visual clarity.
+2. **Interactive Possession Dispatch Board:**
+   - Scroll down to inspect the possession dispatch matrix organized by location and week.
+   - Inspect co-sharing group composition and verify that no two PC activities ever share a group.
+   - Click any activity card to open the **Activity Inspector Drawer**, displaying contract IDs, access sequences, workload yield progress, predecessor dependencies, and nature of work.
 
-Per [PS1_OFFICIAL_ADOPTION_PLAN.md](PS1_OFFICIAL_ADOPTION_PLAN.md), implementation is organised around three sequential milestones and shared ownership:
+### Step 6: Export the Official 3-CSV Submission Bundle
+1. Click the **Export Schedule (CSV)** button in the network toolbar or dispatch board header.
+2. ForRail instantly generates and downloads the three required competition CSV files:
+   - **`SCHEDULE_ACCESS.csv`**: Contains `activity_id,access_seq,week,eclo,access_night`.
+   - **`SCHEDULE_OCCUPANCY.csv`**: Contains `activity_id,week,location_id,co_share_group`.
+   - **`RESULTS.csv`**: Contains `scenario,contract_number,simulated_completion_date,overrun_days`.
+3. The exported files conform exactly to the official PS1 challenge format, with zero extraneous columns or invalid values.
 
-| Workstream | Main files | Ownership and responsibilities |
-|---|---|---|
-| **Data / I/O** | `backend/app/domain_models.py`, `backend/app/io.py`, `backend/app/topology.py`, official CSV inputs | Parse all 8 official CSVs, preserve IDs, composite-key topology, core and buffer footprints, export CSV round-trips. |
-| **Optimisation** | `backend/app/ps1/solver.py`, `validation.py` | CP-SAT multi-week/possession/workload model, mandatory 100% workload yield, Scenarios A/B/C constraints, exact penalty objectives. |
-| **Backend / API** | `backend/app/ps1/models.py`, `artifacts.py`, `backend/app/api/ps1_routes.py`, `backend/app/db/` | Instance upload, run execution, scenario result storage, official 3-CSV export endpoints, transaction/audit integrity. |
-| **Operational Workflow** | Planned modules under `backend/app/ps1/` | Exact-date calendarisation, recurrence generation, emergency input, lexicographic churn and manual-edit preflight. |
-| **Frontend / Explanation** | `nebula-ui/`, presentation materials | Operational schedule UI, scenario comparison, drag/move drafts, structured conflicts, grounded chatbot and demo. |
+---
 
-### Adoption Milestones:
-1. **Milestone 1: Official Correctness** — 8 CSV parsing, complete-workload A/B/C solving, exact 3 CSV exports (`SCHEDULE_ACCESS.csv`, `SCHEDULE_OCCUPANCY.csv`, `RESULTS.csv`), zero official hard violations.
-2. **Milestone 2: Competitive Optimisation** — Exact penalty optimisation, greedy seeds/hints, symmetry breaking, and targeted LNS reoptimisation.
-3. **Milestone 3: Hidden-Instance Hardening** — Bounded runtimes, upload/run isolation, failure handling, disruption replanning demonstrations, and official submission packaging.
-4. **Milestone 4: Operational Scheduling** — Exact global nights, recurring jobs, emergency updates, frozen history, and scenario-first/minimum-churn replanning.
-5. **Milestone 5: Decision Support** — Transactional manual-move validation/repair and grounded schedule explanations/chat.
+## 5. Step-by-Step Guide for Operators: Operations Mode View (Bonus Features)
 
-Read [PS1_OFFICIAL_ADOPTION_PLAN.md](PS1_OFFICIAL_ADOPTION_PLAN.md) and [docs/TEAM_WORK.md](docs/TEAM_WORK.md) for full task definitions.
+In real-world railway networks, maintenance plans cannot remain static. Track defects, emergency repairs, and operational disruptions require rapid, low-churn replanning without violating safety rules or tearing up already-committed engineering schedules.
 
-## 4. Architecture and execution paths
+Switching to **Operations Mode** unlocks ForRail's enterprise operations suite:
+
+```
+┌─────────────────────────────────────────────────────────────────────────────────┐
+│                           OPERATIONS MODE BONUS SUITE                           │
+│                                                                                 │
+│  [1. Mode Toggle]    [2. Add Job]         [3. Preflight Check]  [4. Auto-Solve]    [5. AI Chatbot]   │
+│  Operations Mode ──► Emergency / Ad-Hoc ──► Real-Time Violations ──► Min-Churn  ──► Grounded Gemini │
+│  Baseline Rev 1      Job Insertion        & Safety Alerts       Disruption Replen   Fact Explainer    │
+└─────────────────────────────────────────────────────────────────────────────────┘
+```
+
+### Feature 1: Versioned Operational Baselines
+- Toggle the header switch from **PS1 Requirements** to **Operations Mode**.
+- ForRail automatically creates an operational baseline derived from the official schedule.
+- Baselines are immutable and tracked with revision numbers (e.g. `Baseline base-xxx Revision 1`). All subsequent changes are recorded in an audit trail.
+
+### Feature 2: Ad-Hoc & Emergency Job Request Injection
+1. Click **+ Add Job Request** in the top header.
+2. The modal allows rail operators to specify emergency or unscheduled maintenance:
+   - **Job ID & Contract Number:** Enter unique operational identifiers (e.g., `EMERGENCY-01`, `C001`).
+   - **Release Date & Deadlines:** Set planned start date, planned completion date, and hard completion date.
+   - **Workload Demands:** Required access count, maximum accesses per week, and concurrent workfronts.
+   - **Access Type & Nature:** Choose `PM`, `PC`, or `C`, and nature (`Live`, `Non-live (Consist)`, or `Non-live (Others)`).
+   - **Source:** Choose `addition` (planned routine addition) or `emergency` (urgent track defect).
+   - **Location Span:** Select start and end location on the line.
+3. Click **Add without solving** to inject the job into the active draft.
+
+### Feature 3: Real-Time Preflight Conflict Detection
+1. As soon as new demands or conflicting moves are introduced, ForRail's server-side validator runs preflight checks.
+2. The banner immediately alerts the operator:
+   `⚠️ X scheduling conflicts require resolution`
+3. Click **View conflicts** to review the exact rule breaches:
+   - Location capacity exceedance
+   - Illegal co-sharing mix (e.g. PC co-sharing with another PC)
+   - Predecessor dependency violations
+   - Buffer clashing with live track operations
+
+### Feature 4: Dynamic Re-Planning & Churn Minimization ("Auto Solve")
+1. In the header, click **Auto Solve**.
+2. ForRail executes a lexicographic multi-objective CP-SAT solver:
+   - **Historical Freeze:** All occurred, in-progress, and locked work is strictly frozen and cannot move.
+   - **Primary Objective:** Satisfy all hard safety rules and minimise the active scenario objective ($P$, $V$, or $E$).
+   - **Secondary Objective (Minimum Churn):** Minimise operational disruption by penalising service date displacement days and reassigned jobs.
+3. The solver generates a **Candidate Plan** without overwriting the published baseline.
+
+### Feature 5: Reviewing the Disruption Diff
+1. Once solved, the header banner turns green and reports the exact disruption metrics:
+   `Operational schedule is valid · Candidate diff: X jobs changed · Y days displaced · cost Z`
+2. Operators can inspect both the Network Map and Dispatch Board to verify how the emergency work was slotted in with minimal disturbance to other contractors.
+
+### Feature 6: Promoting Candidate to Baseline ("Accept Schedule")
+1. When satisfied with the candidate plan, click **Accept Schedule** in the header.
+2. ForRail transactionally commits the changes, increments the baseline revision (e.g., Revision 1 $\rightarrow$ Revision 2), and clears transient draft states.
+
+### Feature 7: Grounded AI Schedule Explainer (Gemini Chatbot)
+1. In the bottom-right corner of the screen, click the **Schedule Explainer** launcher button.
+2. The AI assistant opens a docked chat panel powered by Google Gemini.
+3. **Strict Grounding & Security:**
+   - The chatbot is **strictly read-only**: it cannot mutate, solve, or corrupt schedule state.
+   - It is grounded entirely in structured server-side **Fact Packs** and allowlisted read tools.
+   - It cannot hallucinate: if a reason is not backed by mathematical solver evidence, it explicitly reports that no constraint evidence exists.
+4. **Try asking the assistant:**
+   - *"Why did Activity A036 get scheduled in Week 22?"*
+   - *"Which contracts are driving lateness penalties in Scenario A?"*
+   - *"What are the main bottleneck locations in Week 14?"*
+   - *"Explain why the emergency job displaced Contract C004."*
+5. The explainer responds with verifiable facts, citing contract numbers, location IDs, buffer requirements, and objective score impacts.
+
+---
+
+## 6. Automated Testing & Verification
+
+ForRail includes an exhaustive test suite covering data ingestion, graph topology invariants, buffer expansions, scoring reconciliation, CP-SAT solving, and the React frontend.
+
+### Running Backend Tests
+
+```bash
+# Run all active PS1 solver, data, and scoring tests (39 tests)
+source .venv/bin/activate
+pytest backend/tests/test_data_layer.py backend/tests/test_ps1_scoring_validation.py backend/tests/test_ps1_solver.py -v
+```
+
+### Running Frontend Vitest Suite
+
+```bash
+cd nebula-ui
+npm test -- --run
+```
+*(44 unit and integration tests covering the Network Map, Dispatch Board, Chatbot, and Planning State).*
+
+### Running Full Build
+
+```bash
+cd nebula-ui
+npm run build
+```
+
+---
+
+## 7. Project Directory Layout
 
 ```text
-Browser: nebula-ui/ (canonical) or frontend/ (legacy transition)
-       |
-       | authenticated HTTP requests
-       v
-FastAPI: backend/app/api/ps1_routes.py
-       |
-       +--> domain_models.py + io.py + topology.py
-       |      official 8-CSV model and geometry
-       +--> ps1/solver.py + scoring.py + validation.py + artifacts.py
-       |      shared weekly A/B/C solve and exact official exports
-       +--> db/
-       |      immutable instances, revisions, runs, results and audit
-       +--> planned operational workflow
-              recurrence generation -> weekly solve -> calendarisation
-              -> date validation -> replan/manual repair -> explanation facts
-
-Legacy api/routes.py and services/* remain isolated historical scaffolding.
+lta-nebulaX/
+├── PS1_OFFICIAL_ADOPTION_PLAN.md  <-- Single authoritative specification for PS1
+├── README.md                      <-- System architecture & complete user guide
+├── AGENTS.md                      <-- AI agent operational handbook
+├── requirements-cpsat.txt         <-- Core application & OR-Tools dependencies
+├── requirements-dev.txt           <-- Testing and development tools
+├── data/                          <-- 8 official CSVs (01_LINES.csv ... 08_ACTIVITY_DETAILS.csv)
+├── backend/
+│   ├── app/
+│   │   ├── main.py                <-- FastAPI entrypoint, router mounting, static dist serving
+│   │   ├── config.py              <-- Pydantic settings & environment configuration
+│   │   ├── database.py            <-- SQLite WAL persistence, revision counters, audit log
+│   │   ├── domain_models.py       <-- Authoritative Pydantic v2 domain schemas (extra="forbid")
+│   │   ├── io.py                  <-- 8-CSV ingestion & official 3-CSV export bundle
+│   │   ├── topology.py            <-- 2k+1 graph invariants, Live mirroring & protection buffers
+│   │   ├── ps1/
+│   │   │   ├── solver.py          <-- CP-SAT multi-criteria solver (Scenarios A, B, C)
+│   │   │   ├── scoring.py         <-- Penalty calculation (P, V, E)
+│   │   │   ├── validation.py      <-- Independent rule validator
+│   │   │   ├── artifacts.py       <-- 3-CSV bundle serialization & round-trip verification
+│   │   │   └── prompts/           <-- Schedule Explainer system prompts
+│   │   ├── api/
+│   │   │   ├── ps1_routes.py      <-- Official PS1 upload/solve/export REST API
+│   │   │   ├── planning_routes.py <-- Unified planning & operations REST API
+│   │   │   └── ps1_calendar_routes.py
+│   │   └── integrations/
+│   │       └── gemini.py          <-- Grounded Gemini Schedule Explainer service
+│   └── tests/
+│       ├── test_data_layer.py     <-- Ingestion, foreign keys, DAG acyclicity & topology tests
+│       ├── test_ps1_scoring_validation.py
+│       └── test_ps1_solver.py     <-- CP-SAT feasibility and scenario policy tests
+├── nebula-ui/                     <-- Modern React 19 + Vite + Tailwind CSS frontend
+│   ├── src/
+│   │   ├── App.jsx                <-- Main application shell & tab router
+│   │   ├── ScheduleDashboard.jsx  <-- Interactive Possession Dispatch Board
+│   │   ├── components/
+│   │   │   ├── AppHeader.jsx      <-- Top navigation & mode toggles
+│   │   │   ├── network-map/       <-- Interactive SVG Network Map components
+│   │   │   └── chatbot/           <-- Grounded Schedule Explainer chat interface
+│   │   ├── planning/              <-- Planning state machine & API client
+│   │   └── services/              <-- REST API clients
+│   └── dist/                      <-- Production build served at /network-map
+└── docs/                          <-- Comprehensive architectural specifications
+    ├── SOLVER.md                  <-- Mathematical solver formulation details
+    ├── API_CONTRACT.md            <-- REST API schemas
+    ├── DATABASE.md                <-- SQLite schema ledger and persistence architecture
+    ├── REFERENCES.md              <-- Technical references and challenge sources
+    └── TEST_REPORT.md             <-- Test verification logs
 ```
 
-## 5. Folder map
+---
 
-```text
-nebulaX/
-  PS1_OFFICIAL_ADOPTION_PLAN.md  Authoritative source of truth for PS1
-  README.md                      Architecture and adoption guide
-  constraints_lp_setup.md        Retired as PS1 authority; legacy synthetic reference
-  requirements.txt               Core application dependencies
-  requirements-cpsat.txt         Core dependencies plus OR-Tools
-  requirements-dev.txt           Backend tests including CP-SAT tests
-  backend/
-    app/
-      main.py                    FastAPI app, routes, static file serving
-      config.py                  Application configuration
-      database.py                SQLite persistence, transaction & audit logging
-      auth/                      Identity and server-enforced role verification
-      domain_models.py           Canonical official PS1 types
-      io.py                      8-CSV loader and exact 3-CSV writer
-      topology.py                Footprint, buffer, mirrored closure & interchange logic
-      ps1/                       Official solver and planned workflow package
-        models.py                Solver/result/status schemas
-        solver.py                Official CP-SAT weekly access & possession solver
-        scoring.py               Independent score reconstruction
-        validation.py            Independent adopted-rule checks
-        artifacts.py             Strict official artifact readers/round trips
-      db/                        PS1 SQLite records and repositories
-      api/
-        routes.py                Legacy synthetic API routes (transition contract)
-        ps1_routes.py            [NEW] Official PS1 instance, solve & export endpoints
-      services/
-        cp_sat.py                Legacy single-night CP-SAT solver (RETIRED from PS1 path)
-        full_validator.py        Legacy single-night validator (RETIRED from PS1 path)
-        scheduler.py             Solver dispatch interface
-        checker.py               Legacy conflict evaluation
-    tests/                       Automated tests (unit, integration, legacy regression)
-  data/                          Historical synthetic datasets and learning scripts
-  docs/                          Technical contracts, solver guides, and team notes
-  nebula-ui/                     Canonical React/Vite frontend
-  frontend/                      Legacy vanilla-JS transition workspace
-```
+## 8. Data Safety & Fictional Network Notice
 
-## 6. Solver execution
-
-### Official PS1 Solver
-The official solver executes against the 8 official CSV files for Scenarios A, B, and C, requiring 100% activity workload satisfaction across the 30-week horizon:
-
-```sh
-python -m backend.app.ps1 --data-dir data --scenario all --output-dir outputs --time-limit 60
-```
-
-See [PS1_OFFICIAL_ADOPTION_PLAN.md](PS1_OFFICIAL_ADOPTION_PLAN.md) and [docs/SOLVER.md](docs/SOLVER.md) for execution details and validation limitations.
-
-### Operational workflow roadmap
-
-The official weekly result is the foundation, not a claim about a physical weekday. The required operational pipeline will:
-
-1. generate mandatory jobs from explicit station/sector recurrence policies;
-2. solve all official and operational work under one selected A/B/C policy;
-3. map weekly accesses to exact Singapore service dates with a separate calendar solver;
-4. freeze occurred work and replan dynamic/emergency changes with scenario score first and churn second;
-5. validate drag/move drafts server-side and optionally repair the remaining schedule; and
-6. explain displacement and answer schedule questions from structured read-only facts.
-
-Operational fields and generated IDs never appear in an official three-CSV bundle. The legacy single-night solver remains historical and may not import while its deleted domain module is absent.
-
-## 7. Identity and auth
-
-NebulaX includes role-based identity supporting simulated local demo identities and optional real Supabase Auth. Identity enforcement is server-owned and independent of the scheduling domain model. See [docs/SUPABASE.md](docs/SUPABASE.md).
-
-## 8. Current scope: Legacy prototype vs PS1 official adoption
-
-**Legacy Synthetic Prototype (Implemented & Executed Locally):**
-- FastAPI infrastructure, session-based role checks, atomic SQLite transactions with revision counters and audit logging.
-- Interactive single-night scheduling UI with five-minute grid, drag-and-drop, and conflict preview.
-- Single-night synthetic CP-SAT solver and 9-rule validator based on `constraints_lp_setup.md`.
-- *Limitation:* Deferring requests in recovery violates PS1's mandatory full-workload requirement.
-
-**PS1 Official Adoption (In Progress per PS1_OFFICIAL_ADOPTION_PLAN.md):**
-- **Authoritative specification:** [PS1_OFFICIAL_ADOPTION_PLAN.md](PS1_OFFICIAL_ADOPTION_PLAN.md) and official PS1 README.
-- **Problem formulation:** Multi-week planning horizon (30 weeks), weekly accesses, location possession groups (`co_share_group`), contract weekly caps ($K_c$), workfronts ($f_c$).
-- **Workload:** 100% complete workload mandatory (`sum_w(2*x_iw + e_iw) >= 2*d_i`) for all 54 activities. No dropped or truncated activities.
-- **Scenarios:** Strict supply (A), Strict schedule with flexible supply & ECLO (B), Balanced with ECLO windows and max 1 excess slot/loc-week (C).
-- **Deliverables:** 3 official CSV bundles per scenario (`SCHEDULE_ACCESS.csv`, `SCHEDULE_OCCUPANCY.csv`, `RESULTS.csv`), disruption replan demonstration, hosted application, and submission video.
-
-**Required Operational Enrichments (Planned):**
-
-- A calendarisation solver assigns `service_date`/`global_night_id`; `access_night` remains a local weekly index, not a weekday.
-- Explicit recurrence policies generate mandatory station/sector jobs without double-counting supply reductions.
-- Emergency/ad-hoc replans freeze occurred, in-progress and locked work, then optimise each selected scenario objective before minimum churn.
-- Manual drag/move creates a draft and structured backend conflict preflight; publication revalidates transactionally.
-- A grounded chatbot explains displaced work and supports general schedule questions through scoped read-only tools; it cannot validate or publish plans.
-
-## 9. Test it
-
-```sh
-python -m pip install -r requirements-dev.txt
-python -m pytest backend/tests/test_data_layer.py backend/tests/test_ps1_scoring_validation.py backend/tests/test_ps1_solver.py -q
-```
-
-`requirements-dev.txt` includes OR-Tools and pytest. Avoid bare `pytest` while obsolete legacy tests still import the deleted `backend.app.models` module.
-
-Optional JavaScript syntax check (requires Node, not needed to run the app):
-
-```sh
-node scripts/check-js.mjs
-```
-
-See [docs/TEST_REPORT.md](docs/TEST_REPORT.md) for what was actually tested before delivery, and [docs/DEMO_SCRIPT.md](docs/DEMO_SCRIPT.md) for a repeatable walkthrough.
-
-## 10. Troubleshooting
-
-| Symptom | Check |
-|---|---|
-| `No module named backend` | Run commands from the repository root, not from inside `backend/`. |
-| `No module named uvicorn` | Use the `.venv` interpreter and install `requirements-cpsat.txt`. |
-| Browser cannot connect | FastAPI/legacy UI uses `http://127.0.0.1:8000`; Vite development uses `http://127.0.0.1:5173` with FastAPI also running. |
-| Solver says `UNAVAILABLE` | Install `requirements-cpsat.txt`, or explicitly select `demo_search` for the tiny fixture. |
-| Solver says `INPUT_ERROR` | Read the field/request identifier in the message; canonical data is validated before model construction. |
-| Supabase requester sees no seed jobs | Seed jobs belong to fictional demo owners. A real requester starts by submitting their own job. Officers see all seed jobs. |
-| Editing generated JSON is overwritten | Change `scripts/generate_synthetic_dataset.py`, then regenerate `data/comprehensive_synthetic_data.json`. |
-| Existing app still shows starter data | Use the new `backend/nebulax.sqlite3` path or officer reset. Reset deletes local edits and proposals. |
-| Old proposal cannot publish | A request, resource or booking changed. Generate a fresh proposal. |
-| Resource outage makes planning impossible | A locked booking may now be invalid. The starter will not silently move it. |
-| Sign-in disappears on refresh in Supabase mode | Tokens are intentionally memory-only in this basic adapter; sign in again. |
-
-## 11. Safety and data boundaries
-
-Everything in `data/` is synthetic. No actual LTA, SMRT or SBS Transit records are included. This app neither grants track access nor controls power. A model-feasible plan is not a verified safe operational plan.
-
-The `.gitignore` excludes credentials, environments, local database files and caches. Do not add them to Git manually. The source has no service-role key, live credentials or installed dependency folders.
-
-Supporting software references and the distinction from the earlier blueprint are in [docs/REFERENCES.md](docs/REFERENCES.md).
+- All rail networks, station names, sector codes, and maintenance contracts in `data/` are purely synthetic and provided for the Land Transport Authority (LTA) challenge.
+- **ForRail** does not connect to live signaling, power grid, or train control systems.
+- No confidential or proprietary operational data is stored or transmitted.

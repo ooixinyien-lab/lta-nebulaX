@@ -73,7 +73,7 @@ def _execute_claimed(
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="Process NebulaX calendar jobs")
+    parser = argparse.ArgumentParser(description="Process ForRail calendar jobs")
     parser.add_argument("--once", action="store_true", help="Process at most one queued job")
     parser.add_argument("--poll-seconds", type=float, default=1.0)
     args = parser.parse_args()

@@ -1,4 +1,4 @@
-# NebulaX References and Authoritative Sources
+# ForRail References and Authoritative Sources
 
 > [!IMPORTANT]
 > **AUTHORITATIVE SOURCE OF TRUTH: [PS1_OFFICIAL_ADOPTION_PLAN.md](../PS1_OFFICIAL_ADOPTION_PLAN.md)**  
@@ -20,7 +20,7 @@
 
 ## Operational Enrichment Authority
 
-Exact service dates, recurrence cadences, emergency changes, churn weights and chatbot behaviour are NebulaX workflow requirements defined by the root adoption plan; they are not present in the official eight CSVs. Each operational run therefore records versioned calendar/policy/change provenance and remains distinguishable from an official competition run.
+Exact service dates, recurrence cadences, emergency changes, churn weights and chatbot behaviour are ForRail workflow requirements defined by the root adoption plan; they are not present in the official eight CSVs. Each operational run therefore records versioned calendar/policy/change provenance and remains distinguishable from an official competition run.
 
 The bundled LTA DataMall guide is optional context only. DataMall does not provide PS1 workloads, possessions, recurrence policies or the validator, and there is no supplied mapping from real station codes to ALP/BET. Any future connector must be explicit, cached/replayable and unable to block official solving. A chatbot provider likewise supplies language generation, not scheduling facts or authority.
 

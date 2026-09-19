@@ -71,7 +71,7 @@ def store_proposal(db, proposal, user_id):
 
 @router.get("/health")
 def health():
-    return {"ok": True, "application": "NebulaX scheduler"}
+    return {"ok": True, "application": "ForRail scheduler"}
 
 @router.get("/config")
 def public_config(request: Request):

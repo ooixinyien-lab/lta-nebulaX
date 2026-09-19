@@ -1,1 +1,1 @@
-"""External integrations package for NebulaX."""
+"""External integrations package for ForRail."""

@@ -13,7 +13,7 @@ export default class ErrorBoundary extends React.Component {
   }
 
   componentDidCatch(error, errorInfo) {
-    console.error("Nebula UI render failure", error, errorInfo);
+    console.error("ForRail UI render failure", error, errorInfo);
   }
 
   handleReload = () => {
@@ -34,7 +34,7 @@ export default class ErrorBoundary extends React.Component {
       >
         <section className="w-full max-w-2xl rounded-xl border border-rose-800 bg-rose-950/40 p-6 shadow-2xl">
           <p className="text-xs font-mono uppercase tracking-wider text-rose-300">
-            Nebula UI diagnostic
+            ForRail UI diagnostic
           </p>
           <h1 className="mt-2 text-xl font-bold text-rose-200">
             The network map could not render

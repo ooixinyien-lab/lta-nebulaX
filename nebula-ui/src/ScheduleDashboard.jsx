@@ -764,7 +764,7 @@ export default function ScheduleDashboard({
 
       {/* FOOTER BAR */}
       <footer className="border-t border-slate-800 bg-slate-950 px-6 py-2 text-[11px] font-mono text-slate-500 flex justify-between items-center">
-        <span>NEBULA X • Interactive Possession Dispatch Board</span>
+        <span>ForRail • Interactive Possession Dispatch Board</span>
         <span>Mapped CSV Schema: <strong className="text-slate-300">SCHEDULE_ACCESS + SCHEDULE_OCCUPANCY</strong></span>
       </footer>
     </div>

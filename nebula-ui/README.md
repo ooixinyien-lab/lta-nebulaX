@@ -1,6 +1,6 @@
-# NebulaX Canonical UI
+# ForRail Canonical UI
 
-`nebula-ui/` is the React 19 + Vite frontend for new NebulaX features. The root [PS1 adoption plan](../PS1_OFFICIAL_ADOPTION_PLAN.md) is authoritative; scheduling, scoring, conflict detection and explanation facts remain server-side.
+`nebula-ui/` is the React 19 + Vite frontend for ForRail features. The root [PS1 adoption plan](../PS1_OFFICIAL_ADOPTION_PLAN.md) is authoritative; scheduling, scoring, conflict detection and explanation facts remain server-side.
 
 ## Development
 

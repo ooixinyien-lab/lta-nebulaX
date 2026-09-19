@@ -102,7 +102,7 @@ class GeminiChatProvider(ChatProvider):
         )
         if prompt_path.is_file():
             return prompt_path.read_text(encoding="utf-8")
-        return "You are the NebulaX Schedule Explainer. Ground answers in provided facts."
+        return "You are the ForRail Schedule Explainer. Ground answers in provided facts."
 
     @property
     def is_available(self) -> bool:

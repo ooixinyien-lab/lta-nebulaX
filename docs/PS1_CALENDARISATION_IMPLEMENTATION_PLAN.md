@@ -1,4 +1,4 @@
-Implement actual Monday–Sunday night scheduling for NebulaX using this plan.
+Implement actual Monday–Sunday night scheduling for ForRail using this plan.
 
 This is a scoped implementation prompt, based on the repository inspected on 19 September 2026. Read `AGENTS.md`, the root `PS1_OFFICIAL_ADOPTION_PLAN.md` (especially “Map weekly accesses to actual global nights”), `docs/TEAM_WORK.md`, and the relevant code before editing. Follow the user's scope clarifications: the original solver's three CSV outputs and every weekly scheduling decision are fixed, and the calendar interface must stay simple because a detailed scheduling UI will be built later. This milestone adds a separate date mapping and a minimal read-only weekly preview. Automatic weekly repair described in the broader adoption plan is outside this milestone. Follow the authoritative domain rules and implement the phases in order, with working integration and focused verification at each phase. Do not stop after producing another plan.
 

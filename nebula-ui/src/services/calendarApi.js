@@ -13,7 +13,7 @@ const parseResponse = async (response) => {
 export const authHeaders = (identity) => {
   if (identity) return { 'X-Demo-User': identity };
   const token = typeof window !== 'undefined'
-    ? window.localStorage.getItem('nebula_access_token')
+    ? (window.localStorage.getItem('forrail_access_token') || window.localStorage.getItem('nebula_access_token'))
     : null;
   return token ? { Authorization: `Bearer ${token}` } : {};
 };

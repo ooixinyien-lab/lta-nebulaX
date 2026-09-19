@@ -2,24 +2,31 @@
 
 **Audience:** backend, optimisation, data, frontend and presentation teammates.
 
-**Scope:** Problem Statement 1 and the NebulaX operational workflow built around it.
+**Scope:** Problem Statement 1 and the ForRail operational workflow built around it.
 
-**Audit baseline:** the official materials and repository inspected on 18 September 2026; workflow enrichment requirements reconciled on 19 September 2026.
+**Target:** First place in PS1.
+**Order of priorities:**
+1. 100% complete activity workloads (dropping work is prohibited).
+2. Zero violations of physical, safety, operational and scenario rules.
+3. Minimise official penalties ($P$, $V$, $E$).
+4. Correct handling of Scenarios A, B and C.
+5. Predictable runtimes and reliable incumbent retention.
+6. Honest, demonstrated workflow extensions (calendarisation, recurrence, low-churn replanning, safe manual edits and grounded explanations).
 
-## Executive summary
+Our target is first place in PS1. Keep ForRail's application infrastructure and replace its synthetic, single-night optimisation model with a model of weekly accesses, location possessions and complete activity workloads.
 
-Our target is first place in PS1. Keep NebulaX's application infrastructure and replace its synthetic, single-night optimisation model with a model of weekly accesses, location possessions and complete activity workloads.
+This plan reconciles the official PS1 challenge handout with our application workflow. It is the single repository source of truth. If any other document or code comment contradicts it, this plan wins.
 
-The order of priorities is:
+---
 
-1. Schedule every activity's full workload.
-2. Satisfy every official hard rule.
-3. Minimise the official penalty on hidden instances.
-4. Handle Scenarios A, B and C correctly.
-5. Solve reliably within a bounded runtime.
-6. Deliver the operational workflow: exact calendar-night dispatch, recurring maintenance generation, low-churn dynamic replanning, safe manual edits and grounded schedule explanations.
+## What is authoritative vs what is product workflow
 
-The authoritative challenge specification is [the official PS1 README](NebulaX-Hackathon-ProblemStatement-main/PS1/PS1_README.md), supported by its eight input CSVs, sample submission and references. PS2 and PS3 are outside scope. This adoption plan is the single project source of truth that reconciles those official rules with NebulaX's additional workflow requirements. The workflow enrichments are product requirements, not undocumented PS1 rules or extra official score terms.
+The authoritative challenge specification is [the official PS1 README](NebulaX-Hackathon-ProblemStatement-main/PS1/PS1_README.md), supported by its eight input CSVs, sample submission and references. PS2 and PS3 are outside scope. This adoption plan is the single project source of truth that reconciles those official rules with ForRail's additional workflow requirements. The workflow enrichments are product requirements, not undocumented PS1 rules or extra official score terms.
+
+| Term | Definition |
+|---|---|
+| **Official PS1 rule** | Directly stated by or derived from the official README, CSV schemas and reference diagrams. It governs the competition solve, public submission bundles and hidden-instance validation. |
+| **ForRail workflow requirement** | Required for the operational product, but outside the official eight-file input and three-CSV scoring contract. |
 
 **Critical limitation:** the supplied pack does not contain the official validator or the referenced `trackaccess` tooling. Our existing synthetic validator is not the official checker. Exact executable conformance and official scores therefore remain unverified.
 
@@ -29,7 +36,7 @@ This document separates four kinds of statement:
 |---|---|
 | **Official requirement** | Stated in the PS1 README or published input/output schema. Where the materials conflict, the uncertainty is identified. |
 | **Audit finding** | Observed in the supplied data, sample outputs, references or existing code. Reconstructed scores are not official validator results. |
-| **NebulaX workflow requirement** | Required for the operational product, but outside the official eight-file input and three-CSV scoring contract. |
+| **ForRail workflow requirement** | Required for the operational product, but outside the official eight-file input and three-CSV scoring contract. |
 | **Proposed design** | A team implementation recommendation, subject to confirmation against the official executable. |
 
 Frontend implementation remains owned by the frontend team. This plan specifies required user-visible behaviour and backend contracts without moving scheduling rules into the browser.
@@ -218,9 +225,9 @@ Let:
 
 The report also includes total overrun, contracts overrunning, earliness, raw overrun by contract priority, hotspots and access counts. These diagnostics are not additional documented penalties. Stability and utilisation are not direct score terms either.
 
-## NebulaX operational workflow enrichments
+## ForRail operational workflow enrichments
 
-The five capabilities in this section are **NebulaX workflow requirements**. They build on the official model but are not extra PS1 rules. Implement them only through typed, versioned inputs and keep their outputs distinguishable from official submission artifacts.
+The five capabilities in this section are **ForRail workflow requirements**. They build on the official model but are not extra PS1 rules. Implement them only through typed, versioned inputs and keep their outputs distinguishable from official submission artifacts.
 
 ### Authority boundary and run modes
 
@@ -548,7 +555,7 @@ Perturb demand, supply, priorities and release dates to exercise hidden-instance
 
 ### Committed workflow enrichments and optional extras
 
-- Exact global-night mapping, recurrence, low-churn replanning, safe manual moves and grounded schedule questions are committed NebulaX workflow requirements, although they are not official score terms.
+- Exact global-night mapping, recurrence, low-churn replanning, safe manual moves and grounded schedule questions are committed ForRail workflow requirements, although they are not official score terms.
 - Capacity-negotiation suggestions and fragility analysis.
 - Named engineers, equipment routing and minute-level logistics only after official solving is reliable and if the team has time; these have lower immediate return.
 

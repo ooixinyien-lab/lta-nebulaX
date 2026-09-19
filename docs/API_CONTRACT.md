@@ -1,11 +1,11 @@
-# NebulaX API Contract
+# ForRail API Contract
 
 > [!IMPORTANT]
 > **AUTHORITATIVE SOURCE OF TRUTH: [PS1_OFFICIAL_ADOPTION_PLAN.md](../PS1_OFFICIAL_ADOPTION_PLAN.md)**  
-> This document specifies the HTTP API contracts for NebulaX.
+> This document specifies the HTTP API contracts for ForRail.
 > Per [PS1_OFFICIAL_ADOPTION_PLAN.md](../PS1_OFFICIAL_ADOPTION_PLAN.md), the **Problem Statement 1 (PS1) Official Adoption Plan** acts as the single authoritative source of truth.
 >
-> NebulaX provides two API layers:
+> ForRail provides two API layers:
 > 1. **PS1 and operational API (`/api/ps1/...`):** Typed contract for official instance upload/solve/export plus calendarisation, recurrence, replanning, manual-edit validation and grounded explanations.
 > 2. **Legacy Transition API (`/api/...`):** Preserved during transition to support existing synthetic prototype frontend components and historical integration tests.
 
@@ -13,7 +13,7 @@
 
 # Part 1: Official PS1 API Contract (`/api/ps1`)
 
-Base path: `/api/ps1`. Supports the official PS1 workflow and the separately identified NebulaX operational enrichment layer. Only an eligible `competition` run can generate an official three-CSV submission.
+Base path: `/api/ps1`. Supports the official PS1 workflow and the separately identified ForRail operational enrichment layer. Only an eligible `competition` run can generate an official three-CSV submission.
 
 ### Implemented persistence endpoints
 

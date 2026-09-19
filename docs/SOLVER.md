@@ -1,8 +1,8 @@
-# NebulaX Optimisation Solver Specification
+# ForRail Optimisation Solver Specification
 
 > [!IMPORTANT]
 > **AUTHORITATIVE SOURCE OF TRUTH: [PS1_OFFICIAL_ADOPTION_PLAN.md](../PS1_OFFICIAL_ADOPTION_PLAN.md)**  
-> This document specifies the optimisation engine architecture for NebulaX.
+> This document specifies the optimisation engine architecture for ForRail.
 > Per [PS1_OFFICIAL_ADOPTION_PLAN.md](../PS1_OFFICIAL_ADOPTION_PLAN.md), the **Problem Statement 1 (PS1) Official Adoption Plan** acts as the single authoritative source of truth.
 >
 > The legacy single-night solver (`backend/app/services/cp_sat.py`) and validator (`full_validator.py`) based on `constraints_lp_setup.md` are **retired from the official PS1 path** and retained solely as historical learning and demonstration artifacts.
@@ -119,7 +119,7 @@ Let:
 
 ## 6. Operational Enrichment Formulation
 
-These are required NebulaX workflow layers, not official score terms. `competition` runs remain eight-file-only and official-export eligible; `operational` runs may add versioned calendars, recurrence policies and emergency jobs.
+These are required ForRail workflow layers, not official score terms. `competition` runs remain eight-file-only and official-export eligible; `operational` runs may add versioned calendars, recurrence policies and emergency jobs.
 
 ### Calendarisation
 

@@ -1,4 +1,4 @@
-"""Canonical OR-Tools CP-SAT scheduler for the NebulaX prototype.
+"""Canonical OR-Tools CP-SAT scheduler for the ForRail prototype.
 
 The solver implements the nine approved constraint families in
 ``constraints_lp_setup.md``. It first attempts a complete strict schedule. A
@@ -1341,7 +1341,7 @@ def solve(
 
 def print_result(result: dict[str, Any]) -> None:
     """Print a concise human-readable explanation of a structured result."""
-    print("NebulaX canonical CP-SAT scheduler")
+    print("ForRail canonical CP-SAT scheduler")
     print(result.get("operational_warning", "Synthetic prototype data only."))
     print(f"Planning date: {result.get('planning_date', 'unavailable')}")
     print(f"Strict status: {result.get('strict_status', result.get('status'))}")
@@ -1410,7 +1410,7 @@ def print_result(result: dict[str, Any]) -> None:
 def main() -> int:
     """Run the canonical dataset from the command line."""
     parser = argparse.ArgumentParser(
-        description="Run the canonical NebulaX CP-SAT railway-work scheduler."
+        description="Run the canonical ForRail CP-SAT railway-work scheduler."
     )
     parser.add_argument(
         "--data", type=Path, default=CANONICAL_DATA_PATH, help="PlanningSnapshot JSON path"

@@ -1,6 +1,6 @@
 # Local SQLite persistence
 
-NebulaX uses Python's built-in `sqlite3` through `backend/app/database.py`. Both legacy and PS1 repositories use the same `app.state.db`, with one file at `Settings.database_path` (default `backend/nebulax.sqlite3`). There is no SQLAlchemy, Alembic, PostgreSQL driver, or `DATABASE_URL` configuration.
+ForRail uses Python's built-in `sqlite3` through `backend/app/database.py`. Both legacy and PS1 repositories use the same `app.state.db`, with one file at `Settings.database_path` (default `backend/nebulax.sqlite3`). There is no SQLAlchemy, Alembic, PostgreSQL driver, or `DATABASE_URL` configuration.
 
 ## Startup and schema upgrades
 

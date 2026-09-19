@@ -33,7 +33,7 @@ def create_app(settings: Settings | None = None):
             app.state.official_instance_id = inst_id
             app.state.official_revision_id = rev_id
         yield
-    app = FastAPI(title="NEBULA X Rail Scheduling Engine", version="0.2.0", lifespan=lifespan)
+    app = FastAPI(title="ForRail Rail Scheduling Engine", version="0.2.0", lifespan=lifespan)
     app.state.settings = settings
     app.state.db = db
     app.state.official_instance_id = None

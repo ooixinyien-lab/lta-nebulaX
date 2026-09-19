@@ -299,7 +299,7 @@ This is one ECLO access for A036 in week 22 on its contract/type's local night 2
 
 ## Operational Enrichment Addendum
 
-The following formulation is required for NebulaX workflow runs but is not part of official PS1 scoring or the three CSV schemas.
+The following formulation is required for ForRail workflow runs but is not part of official PS1 scoring or the three CSV schemas.
 
 ### Date assignment
 

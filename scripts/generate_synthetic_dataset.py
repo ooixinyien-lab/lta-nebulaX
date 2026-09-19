@@ -2019,7 +2019,7 @@ def validate_all_scenarios() -> None:
 
 def main() -> None:
     parser = argparse.ArgumentParser(
-        description="Standalone Synthetic Dataset Generator for LTA NebulaX railway maintenance scheduling."
+        description="Standalone Synthetic Dataset Generator for LTA ForRail railway maintenance scheduling."
     )
     parser.add_argument(
         "--output",

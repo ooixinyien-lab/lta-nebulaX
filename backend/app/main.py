@@ -1,9 +1,8 @@
 """One server serves both the API and the lightweight, no-build frontend."""
 from contextlib import asynccontextmanager
 import sqlite3
-import logging
 from fastapi import FastAPI, Request
-from fastapi.responses import JSONResponse, FileResponse
+from fastapi.responses import JSONResponse, FileResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from .config import Settings, ROOT
 from .database import Database
@@ -11,24 +10,13 @@ from .db.seed import seed_official_instance
 from .api.ps1_routes import router as ps1_router
 from .api.ps1_calendar_routes import router as ps1_calendar_router
 from .api.ps1_network_routes import router as ps1_network_router
+from .api.schedule_insertion_routes import router as schedule_insertion_router
 
 
 try:
     from .ps1.ps1_routes import router as ps1_ui_router
 except Exception:
     ps1_ui_router = None
-
-try:
-    from .api.routes import router
-except ModuleNotFoundError as exc:
-    # The historical transition router depends on the retired synthetic
-    # models module. Keep the official PS1 API bootable while that router is
-    # removed or migrated separately.
-    if exc.name != "backend.app.models":
-        raise
-    logging.getLogger(__name__).warning("Legacy API unavailable: baseline backend.app.models is missing; PS1 routes remain available")
-    router = None
-
 
 def create_app(settings: Settings | None = None):
     settings = settings or Settings()
@@ -60,15 +48,12 @@ def create_app(settings: Settings | None = None):
             response.headers["Cache-Control"] = "no-store"
         return response
 
-    if router is not None:
-        app.include_router(router)
     app.include_router(ps1_router)
     app.include_router(ps1_network_router)
     app.include_router(ps1_calendar_router)
+    app.include_router(schedule_insertion_router)
     if ps1_ui_router is not None:
         app.include_router(ps1_ui_router)
-    app.mount("/static", StaticFiles(directory=ROOT / "frontend"), name="static")
-
     nebula_dist = ROOT / "nebula-ui" / "dist"
     if nebula_dist.is_dir():
         nebula_assets = nebula_dist / "assets"
@@ -87,7 +72,8 @@ def create_app(settings: Settings | None = None):
 
     @app.get("/", include_in_schema=False)
     def index():
-        return FileResponse(ROOT / "frontend" / "index.html")
+        """Open the current API-first PS1 workflow instead of the retired UI."""
+        return RedirectResponse(url="/docs", status_code=307)
     return app
 
 app = create_app()

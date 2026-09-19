@@ -1,11 +1,12 @@
 import React, { useState } from 'react';
-import { 
-  Upload, CheckCircle, Download, 
-  Play, Calendar, Database, RefreshCw, Map
+import {
+  Upload, CheckCircle,
+  Play, Database, RefreshCw,
 } from 'lucide-react';
 import ScheduleDashboard from './ScheduleDashboard';
 import NetworkMapPage from './pages/NetworkMapPage';
 import CalendarPage from './pages/CalendarPage';
+import AppHeader from './components/AppHeader';
 
 export default function App() {
   // Navigation & State
@@ -79,127 +80,18 @@ export default function App() {
 
   const displayData = parsedData || mockFallbackData;
 
-  if (activeTab === 'calendar_preview') {
-    return <CalendarPage onBack={() => setActiveTab('network_map')} />;
-  }
-
-  if (activeTab === 'network_map') {
-    return (
-      <div className="min-h-screen bg-slate-900 text-slate-100 flex flex-col font-sans">
-        <div className="bg-slate-950/80 border-b border-slate-800/80 px-6 py-1.5 flex items-center justify-between text-xs">
-          <div className="flex items-center gap-4">
-            <span className="flex items-center gap-1.5 text-cyan-400 font-bold">
-              <Map size={14} /> Interactive Network Map
-            </span>
-            <span className="text-slate-600">|</span>
-            <button
-              onClick={() => setActiveTab('upload')}
-              className="text-slate-400 hover:text-slate-200 transition flex items-center gap-1.5"
-            >
-              <Upload size={13} /> Data Ingestion &amp; Matrix Workspace
-            </button>
-            <span className="text-slate-600">|</span>
-            <button
-              onClick={() => setActiveTab('calendar_preview')}
-              className="text-slate-400 hover:text-slate-200 transition flex items-center gap-1.5"
-            >
-              <Calendar size={13} /> Actual Night View
-            </button>
-          </div>
-        </div>
-        <NetworkMapPage />
-      </div>
-    );
-  }
 
   return (
     <div className="min-h-screen bg-slate-900 text-slate-100 flex flex-col font-sans">
+      <AppHeader activeTab={activeTab} onNavigate={setActiveTab} />
       
-      {/* 1. HEADER BAR */}
-      <header className="border-b border-slate-800 bg-slate-950 px-6 py-4 flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <div className="bg-cyan-500 text-slate-950 font-black px-2.5 py-1 rounded text-lg tracking-wider">
-            NEBULA X
-          </div>
-          <span className="text-slate-400 text-sm font-medium">Rail Ingestion & Maintenance Engine</span>
-        </div>
+      <main className="flex-1 min-h-0 overflow-auto relative">
+        {activeTab === 'network_map' && <NetworkMapPage />}
 
-        {/* Ingestion & Export Controls */}
-        <div className="flex items-center gap-3">
-          <button
-            onClick={() => alert("ZIP Export will trigger once solver output is linked!")}
-            className="flex items-center gap-2 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold px-4 py-2 rounded-lg shadow transition"
-          >
-            <Download size={14} /> Export CSV Bundle
-          </button>
-        </div>
-      </header>
-
-      {/* 2. SUB-HEADER NAVIGATION & METRICS */}
-      <div className="border-b border-slate-800 bg-slate-900/50 px-6 py-2 flex items-center justify-between">
-        <div className="flex gap-4 text-sm font-medium text-slate-400">
-          <button
-            onClick={() => setActiveTab('network_map')}
-            className={`flex items-center gap-2 py-1 px-3 rounded-md transition ${
-              activeTab === 'network_map' ? 'bg-slate-800 text-cyan-400' : 'hover:bg-slate-800/50'
-            }`}
-          >
-            <Map size={16} /> Interactive Network Map
-          </button>
-          <button
-            onClick={() => setActiveTab('upload')}
-            className={`flex items-center gap-2 py-1 px-3 rounded-md transition ${
-              activeTab === 'upload' ? 'bg-slate-800 text-cyan-400' : 'hover:bg-slate-800/50'
-            }`}
-          >
-            <Upload size={16} /> Data Import
-          </button>
-          <button
-            onClick={() => setActiveTab('matrix')}
-            className={`flex items-center gap-2 py-1 px-3 rounded-md transition ${
-              activeTab === 'matrix' ? 'bg-slate-800 text-cyan-400' : 'hover:bg-slate-800/50'
-            }`}
-          >
-            <Calendar size={16} /> Schedule Matrix & Topology
-          </button>
-          <button
-            onClick={() => setActiveTab('raw_data')}
-            className={`flex items-center gap-2 py-1 px-3 rounded-md transition ${
-              activeTab === 'raw_data' ? 'bg-slate-800 text-cyan-400' : 'hover:bg-slate-800/50'
-            }`}
-          >
-            <Database size={16} /> Parsed Domain Classes
-          </button>
-          <button
-            onClick={() => setActiveTab('calendar_preview')}
-            className="flex items-center gap-2 py-1 px-3 rounded-md transition hover:bg-slate-800/50"
-          >
-            <Calendar size={16} /> Actual Night View
-          </button>
-        </div>
-
-        {/* Data Class Counts Badge */}
-        {displayData && displayData.counts && (
-          <div className="flex items-center gap-4 text-xs font-mono">
-            <span className="text-slate-400">
-              Projects: <strong className="text-cyan-400">{displayData.counts.projects}</strong>
-            </span>
-            <span className="text-slate-500">|</span>
-            <span className="text-slate-400">
-              Activities: <strong className="text-purple-400">{displayData.counts.activities}</strong>
-            </span>
-            <span className="text-slate-500">|</span>
-            <span className="text-emerald-400 flex items-center gap-1">
-              <CheckCircle size={13} /> Ingest Status: {displayData.status}
-            </span>
-          </div>
+        {activeTab === 'calendar_preview' && (
+          <CalendarPage onBack={() => setActiveTab('network_map')} />
         )}
-      </div>
 
-      {/* 3. MAIN CONTENT AREA */}
-      <main className="flex-1 overflow-hidden relative">
-
-        {/* TAB 1: FILE UPLOAD */}
         {activeTab === 'upload' && (
           <div className="p-8 max-w-4xl mx-auto space-y-6">
             <div className="border-2 border-dashed border-slate-700 hover:border-cyan-500/50 bg-slate-950/50 rounded-xl p-8 text-center transition">
@@ -293,11 +185,12 @@ export default function App() {
 
       </main>
 
-      {/* FOOTER BAR */}
-      <footer className="border-t border-slate-800 bg-slate-950 px-6 py-2 text-[11px] text-slate-500 flex justify-between">
-        <span>NEBULA X • Ingestion Pipeline</span>
-        <span>Validation Engine: <strong className="text-slate-300">IO_PY_PYDANTIC_PARSED</strong></span>
-      </footer>
+      {['upload', 'raw_data'].includes(activeTab) && (
+        <footer className="border-t border-slate-800 bg-slate-950 px-6 py-2 text-[11px] text-slate-500 flex justify-between">
+          <span>NEBULA X • Ingestion Pipeline</span>
+          <span>Validation Engine: <strong className="text-slate-300">IO_PY_PYDANTIC_PARSED</strong></span>
+        </footer>
+      )}
     </div>
   );
 }

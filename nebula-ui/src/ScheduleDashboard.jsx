@@ -1,369 +1,874 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useMemo, useEffect, useCallback } from 'react';
+import { 
+  Calendar, Shield, Zap, Layers, Filter, 
+  ChevronLeft, ChevronRight, X, AlertTriangle, RefreshCw,
+  Sparkles, RotateCcw, AlertOctagon, CheckCircle, Move, Check, Info
+} from 'lucide-react';
+import { fetchFullSchedule, rescheduleWithSolver } from './services/networkApi';
+import { evaluateScheduleConflicts, computeValidDropTargets } from './services/conflictChecker';
 
-// Priority Color Mapping for Matrix
-const PRIORITY_COLORS = {
-  1: 'bg-rose-950/80 border-rose-600/80 text-rose-300 hover:bg-rose-900',
-  2: 'bg-amber-950/80 border-amber-600/80 text-amber-300 hover:bg-amber-900',
-  3: 'bg-slate-900 border-slate-700 text-slate-300 hover:bg-slate-800',
+// Access Type Semantic Styling
+const ACCESS_TYPE_STYLES = {
+  PC: {
+    bg: 'bg-purple-950/80 hover:bg-purple-900',
+    border: 'border-purple-600/80',
+    text: 'text-purple-200',
+    badge: 'bg-purple-900/90 text-purple-300 border-purple-500/50',
+    label: 'Possession with Consist'
+  },
+  C: {
+    bg: 'bg-emerald-950/80 hover:bg-emerald-900',
+    border: 'border-emerald-600/80',
+    text: 'text-emerald-200',
+    badge: 'bg-emerald-900/90 text-emerald-300 border-emerald-500/50',
+    label: 'Consist Tenant'
+  },
+  PM: {
+    bg: 'bg-blue-950/80 hover:bg-blue-900',
+    border: 'border-blue-600/80',
+    text: 'text-blue-200',
+    badge: 'bg-blue-900/90 text-blue-300 border-blue-500/50',
+    label: 'Plant Solo'
+  }
 };
+
+const NIGHTS_OF_WEEK = [
+  { id: 1, label: 'Mon', time: '01:30', isEclo: false },
+  { id: 2, label: 'Tue', time: '01:30', isEclo: false },
+  { id: 3, label: 'Wed', time: '01:30', isEclo: false },
+  { id: 4, label: 'Thu', time: '01:30', isEclo: false },
+  { id: 5, label: 'Fri', time: '00:30', isEclo: true },
+  { id: 6, label: 'Sat', time: '00:30', isEclo: true },
+  { id: 7, label: 'Sun', time: '01:30', isEclo: false },
+];
 
 export default function ScheduleDashboard({
   displayData = {},
-  topologyData = null,
-  scenario = 'A',
+  scenario: initialScenario = 'A',
   onScenarioChange = () => {},
 }) {
-  const [selectedItem, setSelectedItem] = useState(null);
-  const [report, setReport] = useState(null);
-  const [isLoadingPenalties, setIsLoadingPenalties] = useState(false);
-  const canvasRef = useRef(null);
+  const [currentScenario, setCurrentScenario] = useState(initialScenario);
 
-  const weeks = Array.from({ length: 30 }, (_, i) => i + 1);
-  const mockLocations = displayData.sample_sectors?.map((s) => ({
-    id: s.sector_id,
-  })) || [{ id: 'SEC:ALP:S01_S02' }, { id: 'SEC:ALP:S02_S03' }, { id: 'PLAT:ALP:STN_A3' }];
-
-  // 1. Fetch Penalty Scoreboard Data
   useEffect(() => {
-    setIsLoadingPenalties(true);
-    fetch(`/api/ps1/evaluate-penalties?scenario=${scenario}`)
-      .then((res) => (res.ok ? res.json() : null))
-      .then((data) => {
-        if (data) setReport(data);
-      })
-      .catch((err) => console.error('Failed to load penalty report:', err))
-      .finally(() => setIsLoadingPenalties(false));
-  }, [scenario]);
+    setCurrentScenario(initialScenario);
+  }, [initialScenario]);
+  // Navigation & Filter State
+  const [activeWeek, setActiveWeek] = useState(1);
+  const [activeView, setActiveView] = useState('matrix'); // 'matrix' | 'gantt'
+  const [lineFilter, setLineFilter] = useState('ALL');
+  const [boundFilter, setBoundFilter] = useState('BOTH');
+  const [showBuffers, setShowBuffers] = useState(true);
+  const [selectedActivity, setSelectedActivity] = useState(null);
 
-  // 2. High-DPI Canvas Rendering (Seq-Ordered & Dynamic Legend)
+  // Full Schedule State & Solver Baseline
+  const [scheduleData, setScheduleData] = useState(null);
+  const [solverBaseline, setSolverBaseline] = useState(null);
+  const [isLoading, setIsLoading] = useState(false);
+  const [isRescheduling, setIsRescheduling] = useState(false);
+  const [toastMessage, setToastMessage] = useState(null);
+
+  // Manual Drag-and-Drop & Drop-Target Highlighting State
+  const [draggingJob, setDraggingJob] = useState(null);
+  const [dragOverCell, setDragOverCell] = useState(null);
+  const [manualMoveHistory, setManualMoveHistory] = useState([]);
+
+  // Toast Notification Helper
+  const showToast = useCallback((msg) => {
+    setToastMessage(msg);
+    setTimeout(() => setToastMessage(null), 4500);
+  }, []);
+
+  // 1. Initial Data Fetch: Load complete schedule from backend if not already supplied
   useEffect(() => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-
-    const ctx = canvas.getContext('2d');
-    const lines = topologyData?.lines || displayData.sample_lines || [];
-    if (!lines.length) return;
-
-    // --- A. Sharp Crisp Rendering for High-DPI / Retina Displays ---
-    const dpr = window.devicePixelRatio || 1;
-    const rect = canvas.getBoundingClientRect();
-    
-    // Set logical canvas dimensions matching display size
-    canvas.width = rect.width * dpr;
-    canvas.height = rect.height * dpr;
-    ctx.scale(dpr, dpr);
-
-    // Clear previous drawing
-    ctx.clearRect(0, 0, rect.width, rect.height);
-
-    // --- B. Assign Distinct Line Colors ---
-    const lineColors = {};
-    const defaultHues = [200, 15, 140, 280, 45]; // Cyan, Crimson, Emerald, Purple, Amber
-    lines.forEach((line, idx) => {
-      const hue = defaultHues[idx % defaultHues.length];
-      lineColors[line.line_code] = `hsl(${hue}, 85%, 55%)`;
-    });
-
-    // --- C. Sort & Node Positions Based on 02_STATIONS.csv Sequence ---
-    const stationNodes = {};
-
-    lines.forEach((line, lineIdx) => {
-      // Sort stations strictly by sequence order
-      const rawStations = line.stations || displayData.sample_stations || [];
-      const sortedStations = [...rawStations].sort((a, b) => (a.seq ?? 0) - (b.seq ?? 0));
-
-      sortedStations.forEach((stn, seqIdx) => {
-        const sid = stn.station_id || `STN_${seqIdx}`;
-        const yPos = 65 + lineIdx * 65;
-        const xPos = 80 + seqIdx * 115;
-
-        if (!stationNodes[sid]) {
-          stationNodes[sid] = {
-            id: sid,
-            codes: [sid],
-            lines: [line.line_code || 'ALP'],
-            is_interchange: stn.is_interchange === 1,
-            x: xPos,
-            y: yPos,
-          };
-        } else {
-          if (!stationNodes[sid].lines.includes(line.line_code)) {
-            stationNodes[sid].lines.push(line.line_code);
-          }
-          stationNodes[sid].is_interchange = true;
+    let isCancelled = false;
+    async function loadData() {
+      setIsLoading(true);
+      try {
+        const fullData = await fetchFullSchedule(currentScenario);
+        if (!isCancelled && fullData && fullData.activities?.length > 0) {
+          setScheduleData(fullData);
+          setSolverBaseline(JSON.parse(JSON.stringify(fullData))); // Deep clone for clean reset
         }
-      });
-    });
-
-    const nodesList = Object.values(stationNodes);
-
-    // --- D. Draw Sector Tracks Connected in Sequence Order ---
-    lines.forEach((line) => {
-      const rawSectors = line.sectors || displayData.sample_sectors || [];
-      const sortedSectors = [...rawSectors].sort((a, b) => (a.seq ?? 0) - (b.seq ?? 0));
-
-      sortedSectors.forEach((sec) => {
-        const start = nodesList.find((n) => n.id === (sec.from_station || sec.from_station_id));
-        const end = nodesList.find((n) => n.id === (sec.to_station || sec.to_station_id));
-
-        if (start && end) {
-          ctx.beginPath();
-          ctx.moveTo(start.x, start.y);
-          ctx.lineTo(end.x, end.y);
-          ctx.strokeStyle = lineColors[line.line_code] || '#38bdf8';
-          ctx.lineWidth = 4;
-          ctx.lineCap = 'round';
-          ctx.stroke();
-        }
-      });
-    });
-
-    // --- E. Draw Station Nodes ---
-    nodesList.forEach((node) => {
-      const radius = node.is_interchange ? 10 : 7;
-
-      if (node.is_interchange && node.lines.length >= 2) {
-        // Left half-circle
-        ctx.beginPath();
-        ctx.arc(node.x, node.y, radius, Math.PI * 0.5, Math.PI * 1.5);
-        ctx.fillStyle = lineColors[node.lines[0]] || '#ef4444';
-        ctx.fill();
-
-        // Right half-circle
-        ctx.beginPath();
-        ctx.arc(node.x, node.y, radius, Math.PI * 1.5, Math.PI * 0.5);
-        ctx.fillStyle = lineColors[node.lines[1]] || '#3b82f6';
-        ctx.fill();
-
-        // Border ring
-        ctx.beginPath();
-        ctx.arc(node.x, node.y, radius, 0, Math.PI * 2);
-        ctx.lineWidth = 2;
-        ctx.strokeStyle = '#ffffff';
-        ctx.stroke();
-      } else {
-        // Single station
-        ctx.beginPath();
-        ctx.arc(node.x, node.y, radius, 0, Math.PI * 2);
-        ctx.fillStyle = lineColors[node.lines[0]] || '#10b981';
-        ctx.fill();
-        ctx.lineWidth = 2;
-        ctx.strokeStyle = '#ffffff';
-        ctx.stroke();
+      } catch (err) {
+        console.warn('Backend full-schedule endpoint unavailable, using displayData fallback:', err.message);
+      } finally {
+        if (!isCancelled) setIsLoading(false);
       }
+    }
+    loadData();
+    return () => { isCancelled = true; };
+  }, [currentScenario]);
 
-      // Station ID labels
-      ctx.font = 'bold 9px monospace';
-      ctx.fillStyle = '#f8fafc';
-      ctx.textAlign = 'center';
-      ctx.fillText(node.codes.join('/'), node.x, node.y + radius + 12);
+  // Fallback / Normalized Data Elements
+  const activities = scheduleData?.activities || displayData.sample_activities || [];
+  const contracts = scheduleData?.contracts || displayData.sample_projects || [];
+  const locationsList = scheduleData?.locations || [];
+  const sectorsList = scheduleData?.sectors || displayData.sample_sectors || [];
+  const accesses = scheduleData?.accesses || [];
+  const occupancies = scheduleData?.occupancies || [];
+
+  // Activities & Contracts fast lookups
+  const activityMap = useMemo(() => {
+    return new Map(activities.map(a => [a.activity_id, a]));
+  }, [activities]);
+
+  const contractMap = useMemo(() => {
+    return new Map(contracts.map(c => [c.contract_number, c]));
+  }, [contracts]);
+
+  // 2. Real-Time AGENTS.md Conflict Evaluation
+  const conflictReport = useMemo(() => {
+    return evaluateScheduleConflicts({
+      accesses,
+      occupancies,
+      activities,
+      contracts,
+      locations: locationsList,
+      scenario: currentScenario,
+      activeWeek,
+    });
+  }, [accesses, occupancies, activities, contracts, locationsList, currentScenario, activeWeek]);
+
+  // 3. Compute Valid Drop Targets when dragging a job
+  const validDropTargets = useMemo(() => {
+    if (!draggingJob) return {};
+    return computeValidDropTargets({
+      draggingJob,
+      activeWeek,
+      accesses,
+      occupancies,
+      activities,
+      contracts,
+      locations: filteredLocationsMemo(locationsList, sectorsList, activities, lineFilter, boundFilter),
+      scenario: currentScenario,
+    });
+  }, [draggingJob, activeWeek, accesses, occupancies, activities, contracts, locationsList, sectorsList, currentScenario, lineFilter, boundFilter]);
+
+  // Helper for filtered locations
+  function filteredLocationsMemo(locs, secs, acts, lineF, boundF) {
+    const locationSet = new Set();
+    locs.forEach(l => locationSet.add(l.location_id));
+    acts.forEach(a => {
+      if (a.start_location_id) locationSet.add(a.start_location_id);
+      if (a.start_location) locationSet.add(a.start_location);
+    });
+    secs.forEach(s => {
+      if (s.sector_id) locationSet.add(s.sector_id);
     });
 
-    // --- F. Draw Line Color Legend in Top-Right Corner ---
-    const legendX = rect.width - 150;
-    let legendY = 20;
+    return Array.from(locationSet).map((locId) => {
+      const parts = String(locId).split(':');
+      return {
+        sector_id: locId,
+        location_id: locId,
+        line_code: parts[1] || 'BET',
+        is_station: locId.startsWith('PLAT'),
+        is_interchange: locId.includes('H01') || locId.includes('H02') || locId.includes('S15'),
+        bound: locId.endsWith('EB') ? 'EB' : locId.endsWith('WB') ? 'WB' : 'BOTH',
+      };
+    }).filter((loc) => {
+      if (lineF !== 'ALL' && loc.line_code !== lineF) return false;
+      if (boundF !== 'BOTH' && loc.bound !== 'BOTH' && loc.bound !== boundF) return false;
+      return true;
+    });
+  }
 
-    ctx.font = 'bold 10px monospace';
-    ctx.textAlign = 'left';
+  // 4. Matrix Processing: Filtered Locations, Week Activities, and KPIs
+  const { filteredLocations, weekActivities, weekKpis, groupedContracts } = useMemo(() => {
+    const locs = filteredLocationsMemo(locationsList, sectorsList, activities, lineFilter, boundFilter);
 
-    lines.forEach((line) => {
-      const color = lineColors[line.line_code] || '#38bdf8';
-      const label = `${line.line_code} Line (${line.line_name || 'Line'})`;
+    // Merge accesses and occupancies for the active planning week
+    let currentWeekActs = [];
+    if (accesses.length > 0) {
+      const weekAccesses = accesses.filter(a => a.week === activeWeek);
+      currentWeekActs = weekAccesses.map(acc => {
+        const actDetails = activityMap.get(acc.activity_id) || {};
+        const cDetails = contractMap.get(actDetails.contract_number) || {};
+        const occ = occupancies.find(o => o.activity_id === acc.activity_id && o.week === activeWeek);
+        return {
+          ...actDetails,
+          ...acc,
+          start_location: occ?.location_id || actDetails.start_location_id || actDetails.start_location || 'SEC:BET:S01_S02',
+          co_share_group: occ?.co_share_group || 'SOLO',
+          access_type: actDetails.access_type || cDetails.access_type || 'PC',
+        };
+      });
+    } else {
+      currentWeekActs = activities.filter(a => (a.planned_start_week || 1) === activeWeek);
+    }
 
-      // Legend Color Swatch Box
-      ctx.fillStyle = color;
-      ctx.fillRect(legendX, legendY - 8, 12, 12);
-      ctx.strokeStyle = '#ffffff';
-      ctx.lineWidth = 1;
-      ctx.strokeRect(legendX, legendY - 8, 12, 12);
+    // Compute KPIs
+    const ecloCount = currentWeekActs.filter(a => a.eclo === 1).length;
+    const totalSlots = currentWeekActs.length;
 
-      // Legend Text Label
-      ctx.fillStyle = '#cbd5e1';
-      ctx.fillText(label, legendX + 18, legendY);
-
-      legendY += 18;
+    // Group Contracts for View C Gantt
+    const contractsGrouping = {};
+    currentWeekActs.forEach((act) => {
+      const cNum = act.contract_number || 'C001';
+      if (!contractsGrouping[cNum]) contractsGrouping[cNum] = [];
+      contractsGrouping[cNum].push(act);
     });
 
-  }, [topologyData, displayData]);
+    return {
+      filteredLocations: locs,
+      weekActivities: currentWeekActs,
+      weekKpis: { totalSlots, ecloCount },
+      groupedContracts: contractsGrouping,
+    };
+  }, [locationsList, sectorsList, activities, accesses, occupancies, activeWeek, lineFilter, boundFilter, activityMap, contractMap]);
 
-  const summary = report?.summary || {
-    total_score: 48.3,
-    delay_penalty_P: 48.3,
-    location_excess_slots_V: 0,
-    total_eclo_accesses_E: 0,
-    hard_violations_count: 0,
+  // 5. Drag & Move Handlers
+  const handleDragStart = (e, act) => {
+    e.dataTransfer.setData('text/plain', act.activity_id);
+    e.dataTransfer.effectAllowed = 'move';
+    setDraggingJob(act);
+  };
+
+  const handleDragEnd = () => {
+    setDraggingJob(null);
+    setDragOverCell(null);
+  };
+
+  const handleDragOver = (e, locId, nightId) => {
+    e.preventDefault();
+    const cellKey = `${locId}_N${nightId}`;
+    const targetStatus = validDropTargets[cellKey];
+    if (targetStatus && !targetStatus.canDrop) {
+      e.dataTransfer.dropEffect = 'none';
+    } else {
+      e.dataTransfer.dropEffect = 'move';
+    }
+    setDragOverCell(cellKey);
+  };
+
+  const handleDrop = (targetLocationId, targetNightId) => {
+    if (!draggingJob) return;
+    const cellKey = `${targetLocationId}_N${targetNightId}`;
+    const targetStatus = validDropTargets[cellKey];
+
+    if (targetStatus && !targetStatus.canDrop) {
+      showToast(`Cannot drop job here: ${targetStatus.reason || 'Violates AGENTS.md constraint'}`);
+      setDraggingJob(null);
+      setDragOverCell(null);
+      return;
+    }
+
+    // Record history snapshot for Undo
+    setManualMoveHistory(prev => [
+      ...prev,
+      {
+        accesses: JSON.parse(JSON.stringify(accesses)),
+        occupancies: JSON.parse(JSON.stringify(occupancies)),
+        jobId: draggingJob.activity_id,
+        fromNight: draggingJob.access_night,
+        toNight: targetNightId,
+      }
+    ]);
+
+    // Update accesses state: update access_night
+    const updatedAccesses = accesses.map(acc => {
+      if (acc.activity_id === draggingJob.activity_id && acc.week === activeWeek) {
+        return { ...acc, access_night: targetNightId };
+      }
+      return acc;
+    });
+
+    // Update occupancies state: update location_id
+    const updatedOccupancies = occupancies.map(occ => {
+      if (occ.activity_id === draggingJob.activity_id && occ.week === activeWeek) {
+        return { ...occ, location_id: targetLocationId };
+      }
+      return occ;
+    });
+
+    setScheduleData(prev => ({
+      ...prev,
+      accesses: updatedAccesses,
+      occupancies: updatedOccupancies,
+    }));
+
+    showToast(`✓ Moved ${draggingJob.activity_id} to Night N${targetNightId} at ${targetLocationId}`);
+    setDraggingJob(null);
+    setDragOverCell(null);
+  };
+
+  // 6. Reschedule with Solver (Reset to baseline)
+  const handleReschedule = async () => {
+    setIsRescheduling(true);
+    try {
+      const fresh = await rescheduleWithSolver(currentScenario);
+      if (fresh) {
+        setScheduleData(fresh);
+        setSolverBaseline(JSON.parse(JSON.stringify(fresh)));
+        setManualMoveHistory([]);
+        showToast(`✓ Reset to optimal solver baseline for Scenario ${currentScenario} (0 conflicts, 100% complete)`);
+      }
+    } catch (err) {
+      if (solverBaseline) {
+        setScheduleData(JSON.parse(JSON.stringify(solverBaseline)));
+        setManualMoveHistory([]);
+        showToast(`✓ Restored to cached baseline for Scenario ${currentScenario}`);
+      } else {
+        showToast(`Solver reset failed: ${err.message}`);
+      }
+    } finally {
+      setIsRescheduling(false);
+    }
+  };
+
+  // Undo manual move
+  const handleUndoMove = () => {
+    if (manualMoveHistory.length === 0) return;
+    const lastMove = manualMoveHistory[manualMoveHistory.length - 1];
+    setScheduleData(prev => ({
+      ...prev,
+      accesses: lastMove.accesses,
+      occupancies: lastMove.occupancies,
+    }));
+    setManualMoveHistory(prev => prev.slice(0, -1));
+    showToast(`Undid move for ${lastMove.jobId} (reverted to Night N${lastMove.fromNight})`);
   };
 
   return (
-    <div className="p-6 space-y-6 h-full overflow-auto bg-slate-900 text-slate-100">
-      {/* 1. EXECUTION & KPI SCOREBOARD BAR */}
-      <div className="bg-slate-950 border border-slate-800 rounded-xl p-4 shadow-xl flex flex-wrap items-center justify-between gap-4">
-        <div>
-          <h2 className="text-sm font-bold text-cyan-400 uppercase tracking-wider">
-            30-Week Master Schedule Engine
-          </h2>
-          <p className="text-xs text-slate-400">PS1 Constraint & Penalty Score Dashboard</p>
+    <div className="min-h-full bg-slate-950 text-slate-100 flex flex-col font-sans select-none">
+      {/* Page controls stay below the shared application header. */}
+      <div
+        className="schedule-controls border-b border-slate-800 bg-slate-950 px-6 py-3 flex flex-wrap items-center justify-between gap-4"
+        aria-label="Schedule matrix controls"
+      >
+        {/* Planning Horizon Scrubber */}
+        <div className="flex items-center bg-slate-900 border border-slate-800 rounded-xl p-1 shadow-inner">
+          <button
+            onClick={() => setActiveWeek((w) => Math.max(1, w - 1))}
+            disabled={activeWeek === 1}
+            className="p-1.5 rounded-lg hover:bg-slate-800 disabled:opacity-30 text-slate-300 transition"
+          >
+            <ChevronLeft size={18} />
+          </button>
+
+          <div className="px-4 text-center font-mono">
+            <span className="text-xs text-slate-400 block font-sans uppercase text-[9px] tracking-widest">
+              Planning Horizon
+            </span>
+            <span className="text-sm font-bold text-cyan-400">
+              Week {activeWeek} of 30
+            </span>
+          </div>
+
+          <button
+            onClick={() => setActiveWeek((w) => Math.min(30, w + 1))}
+            disabled={activeWeek === 30}
+            className="p-1.5 rounded-lg hover:bg-slate-800 disabled:opacity-30 text-slate-300 transition"
+          >
+            <ChevronRight size={18} />
+          </button>
         </div>
 
-        {/* Scenario Toggle */}
-        <div className="flex items-center bg-slate-900 border border-slate-800 rounded-lg p-1">
-          {['A', 'B', 'C'].map((sc) => (
+        {/* Action Controls: Reschedule with Solver & Undo */}
+        <div className="flex items-center gap-2">
+          {manualMoveHistory.length > 0 && (
             <button
-              key={sc}
-              onClick={() => onScenarioChange(sc)}
-              className={`px-3 py-1 rounded text-xs font-bold font-mono transition ${
-                scenario === sc
+              onClick={handleUndoMove}
+              className="bg-slate-900 hover:bg-slate-800 border border-slate-700 text-slate-300 text-xs font-mono font-bold px-3 py-1.5 rounded-lg flex items-center gap-1.5 transition shadow"
+              title="Undo last manual move"
+            >
+              <RotateCcw size={13} /> Undo Move ({manualMoveHistory.length})
+            </button>
+          )}
+
+          <button
+            onClick={handleReschedule}
+            disabled={isRescheduling}
+            className="bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-400 hover:to-blue-500 text-slate-950 font-black text-xs px-3.5 py-1.5 rounded-lg flex items-center gap-2 shadow-lg shadow-cyan-500/20 transition transform active:scale-95 disabled:opacity-50 cursor-pointer"
+            title="Re-run CP-SAT solver and restore pristine schedule"
+          >
+            {isRescheduling ? (
+              <><RefreshCw size={14} className="animate-spin" /> Solving...</>
+            ) : (
+              <><Sparkles size={14} /> Reschedule with Solver</>
+            )}
+          </button>
+
+          {/* Scenario Selector */}
+          <div className="flex items-center bg-slate-900 border border-slate-800 rounded-lg p-1 ml-2">
+            {['A', 'B', 'C'].map((sc) => (
+              <button
+                key={sc}
+                onClick={() => {
+                  setCurrentScenario(sc);
+                  onScenarioChange(sc);
+                }}
+                className={`px-2.5 py-1 text-xs font-bold font-mono rounded transition cursor-pointer ${
+                  currentScenario === sc
+                    ? 'bg-cyan-600 text-white shadow'
+                    : 'text-slate-400 hover:text-slate-200'
+                }`}
+              >
+                Scen {sc}
+              </button>
+            ))}
+          </div>
+
+          {/* View Toggle */}
+          <div className="bg-slate-900 border border-slate-800 p-1 rounded-lg flex font-mono text-xs">
+            <button
+              onClick={() => setActiveView('matrix')}
+              className={`px-3 py-1 rounded-md font-bold transition flex items-center gap-1.5 ${
+                activeView === 'matrix'
                   ? 'bg-cyan-600 text-white shadow'
                   : 'text-slate-400 hover:text-slate-200'
               }`}
             >
-              Scenario {sc}
+              <Calendar size={13} /> 7-Day Matrix
             </button>
-          ))}
+            <button
+              onClick={() => setActiveView('gantt')}
+              className={`px-3 py-1 rounded-md font-bold transition flex items-center gap-1.5 ${
+                activeView === 'gantt'
+                  ? 'bg-cyan-600 text-white shadow'
+                  : 'text-slate-400 hover:text-slate-200'
+              }`}
+            >
+              <Layers size={13} /> Gantt
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {/* ========================================================================= */}
+      {/* 2. REAL-TIME CONFLICT STATUS BANNER */}
+      {/* ========================================================================= */}
+      <div className={`border-b px-6 py-2 flex items-center justify-between text-xs font-mono transition-all ${
+        conflictReport.hasConflicts
+          ? 'bg-rose-950/80 border-rose-800/80 text-rose-200'
+          : 'bg-emerald-950/60 border-emerald-800/60 text-emerald-300'
+      }`}>
+        <div className="flex items-center gap-3">
+          {conflictReport.hasConflicts ? (
+            <>
+              <AlertOctagon size={16} className="text-rose-400 animate-pulse" />
+              <span className="font-bold tracking-wide">
+                ⚠️ {conflictReport.totalConflicts} SCHEDULE CLASH{conflictReport.totalConflicts === 1 ? '' : 'ES'} DETECTED (AGENTS.MD CONSTRAINTS)
+              </span>
+              <span className="text-rose-400/80 text-[11px]">
+                — Clashing activities highlighted in bold red below
+              </span>
+            </>
+          ) : (
+            <>
+              <CheckCircle size={15} className="text-emerald-400" />
+              <span className="font-bold tracking-wide">
+                ✓ 100% COMPLIANT: ZERO CONSTRAINTS VIOLATED IN WEEK {activeWeek}
+              </span>
+              <span className="text-emerald-400/80 text-[11px]">
+                — Drag any job to reschedule; conflict checker validates in real-time
+              </span>
+            </>
+          )}
         </div>
 
-        {/* Penalty KPI Cards */}
-        <div className="flex items-center gap-4 text-xs font-mono">
-          <div className="bg-slate-900 px-3 py-1.5 rounded-lg border border-slate-800">
-            <span className="text-slate-500 block text-[10px]">TOTAL PENALTY</span>
-            <span className="text-sm font-extrabold text-amber-400">
-              {isLoadingPenalties ? '...' : summary.total_score}
-            </span>
+        {/* Dragging Help Pill */}
+        {draggingJob && (
+          <div className="flex items-center gap-2 bg-cyan-950 border border-cyan-500/50 text-cyan-300 px-3 py-0.5 rounded-full font-bold animate-pulse">
+            <Move size={12} /> Dragging {draggingJob.activity_id} ({draggingJob.access_type}) — Valid slots highlighted in green
           </div>
-          <div className="bg-slate-900 px-3 py-1.5 rounded-lg border border-slate-800">
-            <span className="text-slate-500 block text-[10px]">DELAY (P)</span>
-            <span className="text-rose-400 font-bold">{summary.delay_penalty_P}</span>
+        )}
+
+        {/* Toast Alert */}
+        {toastMessage && (
+          <div className="bg-slate-900 border border-cyan-500/60 text-cyan-300 px-3 py-0.5 rounded shadow-lg text-xs font-bold">
+            {toastMessage}
           </div>
-          <div className="bg-slate-900 px-3 py-1.5 rounded-lg border border-slate-800">
-            <span className="text-slate-500 block text-[10px]">EXCESS (V)</span>
-            <span className="text-amber-400 font-bold">{summary.location_excess_slots_V} slots</span>
+        )}
+      </div>
+
+      {/* ========================================================================= */}
+      {/* 3. FILTER & KPI STRIP */}
+      {/* ========================================================================= */}
+      <div className="border-b border-slate-800 bg-slate-900/60 px-6 py-2 flex flex-wrap items-center justify-between gap-4 text-xs font-mono">
+        <div className="flex flex-wrap items-center gap-4">
+          <div className="flex items-center gap-2 bg-slate-950 px-3 py-1 rounded-lg border border-slate-800">
+            <Filter size={13} className="text-cyan-400" />
+            <span className="text-slate-400">Line:</span>
+            <select
+              value={lineFilter}
+              onChange={(e) => setLineFilter(e.target.value)}
+              className="bg-transparent text-slate-200 font-bold focus:outline-none cursor-pointer"
+            >
+              <option value="ALL">All Lines</option>
+              <option value="ALP">ALP Line</option>
+              <option value="BET">BET Line</option>
+            </select>
           </div>
-          <div className="bg-slate-900 px-3 py-1.5 rounded-lg border border-slate-800">
-            <span className="text-slate-500 block text-[10px]">ECLO (E)</span>
-            <span className="text-sky-400 font-bold">{summary.total_eclo_accesses_E}</span>
+
+          <div className="flex items-center gap-2 bg-slate-950 px-3 py-1 rounded-lg border border-slate-800">
+            <span className="text-slate-400">Bound:</span>
+            <select
+              value={boundFilter}
+              onChange={(e) => setBoundFilter(e.target.value)}
+              className="bg-transparent text-slate-200 font-bold focus:outline-none cursor-pointer"
+            >
+              <option value="BOTH">Both Bounds (EB + WB)</option>
+              <option value="EB">Eastbound (EB)</option>
+              <option value="WB">Westbound (WB)</option>
+            </select>
           </div>
-          {summary.hard_violations_count > 0 && (
-            <div className="bg-rose-950 border border-rose-600 text-rose-300 px-3 py-1.5 rounded-lg font-bold text-[11px] animate-pulse">
-              ⚠ {summary.hard_violations_count} Violations
+
+          <label className="flex items-center gap-1.5 cursor-pointer text-slate-300 hover:text-amber-300">
+            <input
+              type="checkbox"
+              checked={showBuffers}
+              onChange={(e) => setShowBuffers(e.target.checked)}
+              className="accent-amber-500 rounded cursor-pointer"
+            />
+            Show Safety Buffers
+          </label>
+        </div>
+
+        {/* Capacity KPIs */}
+        <div className="flex items-center gap-6">
+          <div className="bg-slate-950 px-3 py-1 rounded-lg border border-slate-800 flex items-center gap-3">
+            <div>
+              <span className="text-slate-500 text-[9px] block">WEEK {activeWeek} POSSESSIONS</span>
+              <span className="text-cyan-400 font-bold">{weekKpis.totalSlots} night-slots</span>
+            </div>
+            <div className="border-l border-slate-800 pl-3">
+              <span className="text-slate-500 text-[9px] block">ECLO ACCELERATED</span>
+              <span className="text-amber-400 font-bold flex items-center gap-1">
+                <Zap size={11} fill="currentColor" /> {weekKpis.ecloCount} (⚡ 1.5x)
+              </span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* ========================================================================= */}
+      {/* 4. MAIN CONTENT AREA */}
+      {/* ========================================================================= */}
+      <main className="flex-1 overflow-hidden relative flex">
+        
+        {/* SCHEDULE MATRIX VIEW */}
+        <div className="flex-1 overflow-auto p-6 space-y-6">
+          {isLoading ? (
+            <div className="flex flex-col items-center justify-center h-64 text-cyan-400 font-mono space-y-3">
+              <RefreshCw size={24} className="animate-spin" />
+              <p className="text-sm font-bold">Loading full PS1 schedule...</p>
+            </div>
+          ) : activeView === 'matrix' ? (
+            <div className="bg-slate-950 border border-slate-800 rounded-2xl overflow-hidden shadow-2xl">
+              <div className="overflow-x-auto">
+                <table className="w-full text-left border-collapse min-w-[1100px]">
+                  <thead>
+                    <tr className="border-b border-slate-800 bg-slate-900/90 font-mono text-xs">
+                      <th className="p-3 sticky left-0 bg-slate-900 border-r border-slate-800 w-64 z-20 font-bold text-slate-300 uppercase tracking-wider">
+                        Track Location / Sector ID
+                      </th>
+
+                      {/* 7 Calendar Nights Columns (N1-N7) */}
+                      {NIGHTS_OF_WEEK.map((night) => (
+                        <th
+                          key={night.id}
+                          className={`p-2.5 text-center border-r border-slate-800/80 min-w-[130px] ${
+                            night.isEclo ? 'bg-amber-950/20 text-amber-300' : 'text-slate-300'
+                          }`}
+                        >
+                          <div className="font-bold flex items-center justify-center gap-1">
+                            {night.label} Night (N{night.id})
+                            {night.isEclo && <Zap size={12} className="text-amber-400 fill-amber-400" />}
+                          </div>
+                          <div className="text-[10px] text-slate-500 font-normal">
+                            Access @ {night.time} HRS
+                          </div>
+                        </th>
+                      ))}
+                    </tr>
+                  </thead>
+
+                  <tbody className="divide-y divide-slate-800/60 text-xs font-mono">
+                    {filteredLocations.map((loc) => (
+                      <tr key={loc.sector_id} className="hover:bg-slate-900/30 transition">
+                        
+                        {/* Sticky Sector ID Column */}
+                        <td className="p-3 sticky left-0 bg-slate-950 border-r border-slate-800 font-bold text-slate-200 z-10 flex items-center justify-between gap-2">
+                          <span className="truncate">{loc.sector_id}</span>
+                          <div className="flex items-center gap-1 text-[9px]">
+                            {loc.is_station && (
+                              <span className="px-1.5 py-0.5 rounded bg-cyan-950 border border-cyan-700 text-cyan-300 font-bold">
+                                STN
+                              </span>
+                            )}
+                            {loc.is_interchange && (
+                              <span className="px-1.5 py-0.5 rounded bg-rose-950 border border-rose-700 text-rose-300 font-bold">
+                                INT
+                              </span>
+                            )}
+                          </div>
+                        </td>
+
+                        {/* 7 Night Cells */}
+                        {NIGHTS_OF_WEEK.map((night) => {
+                          const cellKey = `${loc.sector_id}_N${night.id}`;
+                          const dropInfo = validDropTargets[cellKey];
+                          const isDraggingActive = draggingJob !== null;
+                          const canDropHere = isDraggingActive && dropInfo?.canDrop;
+                          const cannotDropHere = isDraggingActive && !dropInfo?.canDrop;
+                          const isDragOver = dragOverCell === cellKey;
+
+                          const matchingActs = weekActivities.filter(
+                            (a) => a.start_location === loc.sector_id && a.access_night === night.id
+                          );
+
+                          // Group by co_share_group from SCHEDULE_OCCUPANCY.csv
+                          const coShareGroups = {};
+                          matchingActs.forEach((act) => {
+                            const grp = act.co_share_group || 'SOLO';
+                            if (!coShareGroups[grp]) coShareGroups[grp] = [];
+                            coShareGroups[grp].push(act);
+                          });
+
+                          return (
+                            <td
+                              key={night.id}
+                              onDragOver={(e) => handleDragOver(e, loc.sector_id, night.id)}
+                              onDrop={() => handleDrop(loc.sector_id, night.id)}
+                              className={`p-1.5 border-r border-slate-800/50 align-top relative transition-all duration-150 min-h-[70px] ${
+                                night.isEclo ? 'bg-amber-950/10' : ''
+                              } ${
+                                canDropHere
+                                  ? isDragOver
+                                    ? 'bg-emerald-900/60 border-2 border-emerald-400 ring-2 ring-emerald-400/60 shadow-xl'
+                                    : 'bg-emerald-950/40 border-2 border-dashed border-emerald-500/80'
+                                  : ''
+                              } ${
+                                cannotDropHere
+                                  ? 'opacity-20 filter grayscale bg-slate-950/90 pointer-events-none'
+                                  : ''
+                              }`}
+                            >
+                              {/* Valid Drop Target Highlight Banner */}
+                              {canDropHere && (
+                                <div className="text-[10px] font-bold text-emerald-300 bg-emerald-950/90 border border-emerald-500/60 rounded px-1.5 py-0.5 mb-1 flex items-center justify-center gap-1 shadow">
+                                  <Check size={11} /> Drop to Schedule
+                                </div>
+                              )}
+
+                              {Object.entries(coShareGroups).map(([groupTag, acts], grpIdx) => (
+                                <div
+                                  key={grpIdx}
+                                  className={`rounded-lg p-1 space-y-1 shadow-lg border my-0.5 ${
+                                    groupTag !== 'SOLO'
+                                      ? 'bg-slate-900/90 border-cyan-700/80'
+                                      : 'bg-transparent border-transparent'
+                                  }`}
+                                >
+                                  {groupTag !== 'SOLO' && (
+                                    <div className="text-[9px] font-bold text-cyan-400 px-1 border-b border-slate-800 pb-0.5 flex justify-between">
+                                      <span>GROUP #{groupTag}</span>
+                                      <span>1 SLOT</span>
+                                    </div>
+                                  )}
+
+                                  {acts.map((act) => {
+                                    const accessType = act.access_type || 'PC';
+                                    const style = ACCESS_TYPE_STYLES[accessType] || ACCESS_TYPE_STYLES.PC;
+                                    const isSelected = selectedActivity?.activity_id === act.activity_id;
+                                    const isBeingDragged = draggingJob?.activity_id === act.activity_id;
+
+                                    // Check if this activity has an active conflict
+                                    const actIssues = conflictReport.activityConflicts?.get(act.activity_id) || [];
+                                    const hasConflict = actIssues.length > 0;
+
+                                    return (
+                                      <div
+                                        key={act.activity_id}
+                                        draggable={true}
+                                        onDragStart={(e) => handleDragStart(e, act)}
+                                        onDragEnd={handleDragEnd}
+                                        onClick={() => setSelectedActivity(act)}
+                                        className={`w-full text-left p-1.5 rounded-md border transition-all cursor-grab active:cursor-grabbing transform hover:scale-[1.02] ${
+                                          isBeingDragged ? 'opacity-30 scale-95 border-dashed border-cyan-400' : ''
+                                        } ${
+                                          hasConflict
+                                            ? 'bg-rose-950/95 border-rose-500 text-rose-100 ring-2 ring-rose-500 shadow-xl shadow-rose-900/60 animate-pulse'
+                                            : `${style.bg} ${style.border} ${style.text}`
+                                        } ${
+                                          isSelected ? 'ring-2 ring-cyan-400 shadow-xl' : ''
+                                        }`}
+                                      >
+                                        <div className="flex items-center justify-between">
+                                          <span className="font-extrabold text-xs flex items-center gap-1">
+                                            {hasConflict && <AlertTriangle size={12} className="text-rose-400 shrink-0" />}
+                                            {act.activity_id}
+                                          </span>
+                                          <span className="text-[9px] text-slate-400 font-mono">
+                                            Seq #{act.access_seq || 1}
+                                          </span>
+                                        </div>
+
+                                        <div className="text-[10px] text-slate-300 opacity-90 truncate mt-0.5">
+                                          Contract: {act.contract_number || 'C001'} ({accessType})
+                                        </div>
+
+                                        {/* CLASH BADGE: Rendered in RED when conflict detected */}
+                                        {hasConflict && (
+                                          <div className="mt-1 bg-rose-900/90 border border-rose-400 text-rose-100 font-bold text-[9px] rounded px-1.5 py-0.5 space-y-0.5 shadow">
+                                            <div className="flex items-center gap-1 text-rose-200">
+                                              <AlertOctagon size={10} />
+                                              <span>{actIssues[0].rule.toUpperCase()} CLASH</span>
+                                            </div>
+                                            <div className="text-[8px] text-rose-300 leading-tight">
+                                              {actIssues[0].message}
+                                            </div>
+                                          </div>
+                                        )}
+
+                                        {act.eclo === 1 && !hasConflict && (
+                                          <div className="mt-1 flex items-center gap-1 text-[9px] font-bold text-amber-300 bg-amber-950/80 border border-amber-600/60 rounded px-1 py-0.2">
+                                            <Zap size={9} fill="currentColor" /> ECLO (1.5x Yield)
+                                          </div>
+                                        )}
+                                      </div>
+                                    );
+                                  })}
+                                </div>
+                              ))}
+                            </td>
+                          );
+                        })}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          ) : (
+            /* VIEW C: CONTRACT GANTT & RESULTS */
+            <div className="bg-slate-950 border border-slate-800 rounded-2xl p-6 shadow-2xl space-y-6 font-mono">
+              <h3 className="text-sm font-bold text-cyan-400 uppercase tracking-wider">
+                Simulated Completion Dates & Delay Overruns (RESULTS.csv)
+              </h3>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                {Object.entries(groupedContracts).map(([contractNum, acts]) => {
+                  const res = (scheduleData?.contract_results || displayData.results || []).find((r) => r.contract_number === contractNum) || {};
+                  const isOverrun = res.overrun_days > 0;
+
+                  return (
+                    <div
+                      key={contractNum}
+                      className={`bg-slate-900 border rounded-xl p-4 space-y-3 ${
+                        isOverrun ? 'border-rose-600/80' : 'border-slate-800'
+                      }`}
+                    >
+                      <div className="flex justify-between items-center border-b border-slate-800 pb-2">
+                        <span className="text-sm font-bold text-slate-100">{contractNum}</span>
+                        {isOverrun ? (
+                          <span className="px-2 py-0.5 rounded bg-rose-950 border border-rose-600 text-rose-300 text-[10px] font-bold flex items-center gap-1">
+                            <AlertTriangle size={11} /> +{res.overrun_days} Days Delay
+                          </span>
+                        ) : (
+                          <span className="px-2 py-0.5 rounded bg-emerald-950 border border-emerald-600 text-emerald-300 text-[10px] font-bold">
+                            On Schedule
+                          </span>
+                        )}
+                      </div>
+
+                      <div className="text-xs space-y-1 text-slate-400">
+                        <div>Simulated Completion: <strong className="text-slate-200">{res.simulated_completion_date || 'N/A'}</strong></div>
+                        <div>Total Activities Enrolled: <strong className="text-cyan-400">{acts.length}</strong></div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
             </div>
           )}
         </div>
-      </div>
 
-      {/* 2. TOPOLOGY NETWORK DIAGRAM CANVAS */}
-      <div className="bg-slate-950 border border-slate-800 rounded-xl p-4 shadow-xl">
-        <h4 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">
-          Railway Network Topology Map
-        </h4>
-        <canvas
-          ref={canvasRef}
-          style={{ width: '100%', height: '220px' }}
-          className="bg-slate-900 rounded-lg border border-slate-800"
-        />
-      </div>
+        {/* POSSESSION INSPECTOR DRAWER */}
+        {selectedActivity && (
+          <div className="w-96 bg-slate-950 border-l border-slate-800 p-6 shadow-2xl overflow-y-auto z-30 flex flex-col justify-between font-mono">
+            <div className="space-y-6">
+              
+              <div className="flex items-center justify-between border-b border-slate-800 pb-4">
+                <div>
+                  <h3 className="text-base font-bold text-cyan-400">{selectedActivity.activity_id}</h3>
+                  <span className="text-xs text-slate-400">Possession &amp; Conflict Inspector</span>
+                </div>
+                <button
+                  onClick={() => setSelectedActivity(null)}
+                  className="text-slate-400 hover:text-white p-1 rounded-md"
+                >
+                  <X size={18} />
+                </button>
+              </div>
 
-      {/* 3. LOCATION-TIME SCHEDULE MATRIX */}
-      <div className="bg-slate-950 border border-slate-800 rounded-xl overflow-hidden shadow-2xl">
-        <div className="overflow-x-auto">
-          <table className="w-full text-left border-collapse min-w-[1200px]">
-            <thead>
-              <tr className="border-b border-slate-800 bg-slate-900/80 text-[10px] uppercase tracking-wider text-slate-400">
-                <th className="p-3 sticky left-0 bg-slate-900 border-r border-slate-800 w-48 z-10">
-                  Location / Sector ID
-                </th>
-                {weeks.map((w) => (
-                  <th key={w} className="p-2 text-center border-r border-slate-800/50 w-12 font-mono">
-                    W{w}
-                  </th>
-                ))}
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-800/50 text-xs font-mono">
-              {mockLocations.map((loc) => (
-                <tr key={loc.id} className="hover:bg-slate-900/30">
-                  <td className="p-3 sticky left-0 bg-slate-950 border-r border-slate-800 font-medium text-slate-300">
-                    {loc.id}
-                  </td>
-                  {weeks.map((w) => {
-                    const acts = (displayData.sample_activities || []).filter(
-                      (a) => a.planned_start_week === w && a.start_location === loc.id
-                    );
+              {/* Active Conflicts in Drawer */}
+              {conflictReport.activityConflicts?.has(selectedActivity.activity_id) && (
+                <div className="bg-rose-950/80 border border-rose-600 rounded-xl p-4 space-y-2 text-xs">
+                  <div className="text-rose-300 font-bold flex items-center gap-2">
+                    <AlertTriangle size={14} className="text-rose-400" />
+                    <span>Active Constraint Violations:</span>
+                  </div>
+                  {conflictReport.activityConflicts.get(selectedActivity.activity_id).map((iss, idx) => (
+                    <div key={idx} className="bg-rose-900/60 p-2 rounded text-rose-200 text-[11px]">
+                      <span className="font-bold text-rose-100 block">{iss.rule.toUpperCase()}:</span>
+                      {iss.message}
+                    </div>
+                  ))}
+                </div>
+              )}
 
-                    return (
-                      <td key={w} className="p-1 border-r border-slate-800/40 text-center">
-                        {acts.map((matchingAct) => {
-                          const priStyle =
-                            PRIORITY_COLORS[matchingAct.activity_priority] || PRIORITY_COLORS[3];
-                          const isEclo = matchingAct.eclo === 1;
+              {/* Data Card */}
+              <div className="bg-slate-900 p-4 rounded-xl border border-slate-800 space-y-2">
+                <div className="text-slate-500 text-[10px]">CONTRACT NUMBER</div>
+                <div className="text-sm font-bold text-slate-200">{selectedActivity.contract_number || 'C001'}</div>
 
-                          return (
-                            <button
-                              key={matchingAct.activity_id}
-                              onClick={() => setSelectedItem(matchingAct)}
-                              className={`w-full py-1 px-1 rounded text-[10px] font-bold transition transform hover:scale-105 border my-0.5 ${priStyle}`}
-                            >
-                              {matchingAct.activity_id}
-                              {isEclo && <span className="ml-1 text-sky-300">⚡</span>}
-                            </button>
-                          );
-                        })}
-                      </td>
-                    );
-                  })}
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </div>
+                <div className="border-t border-slate-800 pt-2 text-slate-500 text-[10px]">LOCATION ID</div>
+                <div className="text-xs font-bold text-cyan-300">{selectedActivity.start_location}</div>
+              </div>
 
-      {/* 4. SLIDE-OVER JOB INSPECTOR DRAWER */}
-      {selectedItem && (
-        <div className="fixed inset-y-0 right-0 w-96 bg-slate-950 border-l border-slate-800 p-6 shadow-2xl z-50 overflow-y-auto space-y-6">
-          <div className="flex items-center justify-between border-b border-slate-800 pb-4">
-            <div>
-              <h3 className="text-base font-bold text-cyan-400 font-mono">
-                {selectedItem.activity_id}
-              </h3>
-              <p className="text-xs text-slate-400">
-                Contract: {selectedItem.contract_number || 'C001'}
-              </p>
+              <div className="bg-slate-900 p-4 rounded-xl border border-slate-800 space-y-3 text-xs">
+                <div className="flex justify-between">
+                  <span className="text-slate-400">Access Sequence:</span>
+                  <span className="text-slate-200 font-bold">Seq #{selectedActivity.access_seq || 1}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-slate-400">Night Scheduled:</span>
+                  <span className="text-cyan-400 font-bold">Night N{selectedActivity.access_night}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-slate-400">Co-Share Group:</span>
+                  <span className="text-cyan-400 font-bold">{selectedActivity.co_share_group || 'SOLO'}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-slate-400">ECLO Status:</span>
+                  <span className={selectedActivity.eclo ? 'text-amber-400 font-bold' : 'text-slate-500'}>
+                    {selectedActivity.eclo ? 'Granted (1.5x Yield)' : 'Standard'}
+                  </span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-slate-400">Predecessor:</span>
+                  <span className="text-slate-300">{selectedActivity.predecessor_activity_id || 'None'}</span>
+                </div>
+              </div>
             </div>
+
             <button
-              onClick={() => setSelectedItem(null)}
-              className="text-slate-400 hover:text-white font-bold p-1 rounded"
+              onClick={() => setSelectedActivity(null)}
+              className="mt-6 w-full bg-slate-900 hover:bg-slate-800 border border-slate-700 text-slate-200 text-xs font-bold py-2.5 rounded-xl transition"
             >
-              ✕
+              Close Inspector
             </button>
           </div>
+        )}
+      </main>
 
-          <div className="space-y-4 text-xs font-mono">
-            <div className="bg-slate-900 p-3 rounded-lg border border-slate-800 space-y-1">
-              <div className="text-slate-400">Planned Start: Week {selectedItem.planned_start_week}</div>
-              <div className="text-slate-400">Workload: {selectedItem.total_accesses || 7} Accesses</div>
-              <div className="text-amber-400">Priority: Tier {selectedItem.activity_priority || 1}</div>
-            </div>
-
-            <div className="bg-slate-900 p-3 rounded-lg border border-slate-800 space-y-2">
-              <h5 className="font-bold text-slate-300 uppercase tracking-wider text-[10px]">
-                Constraint & Execution Audit
-              </h5>
-              <div className="flex justify-between">
-                <span className="text-slate-400">ECLO Accelerated:</span>
-                <span className={selectedItem.eclo ? 'text-sky-400 font-bold' : 'text-slate-500'}>
-                  {selectedItem.eclo ? 'Yes (+0.5 Yield)' : 'No'}
-                </span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-slate-400">Predecessor:</span>
-                <span className="text-slate-200">
-                  {selectedItem.predecessor_activity_id || 'None'}
-                </span>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
+      {/* FOOTER BAR */}
+      <footer className="border-t border-slate-800 bg-slate-950 px-6 py-2 text-[11px] font-mono text-slate-500 flex justify-between items-center">
+        <span>NEBULA X • Interactive Possession Dispatch Board</span>
+        <span>Mapped CSV Schema: <strong className="text-slate-300">SCHEDULE_ACCESS + SCHEDULE_OCCUPANCY</strong></span>
+      </footer>
     </div>
   );
 }

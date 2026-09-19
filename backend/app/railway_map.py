@@ -99,24 +99,29 @@ class NetworkMapService:
             except Exception:
                 pass
 
-        source_type = (
-            "solved_outputs"
-            if any(s.source == "solved" for s in scenarios if s.available)
-            else "sample_outputs"
-            if any(s.source == "mock" for s in scenarios if s.available)
-            else "solver"
-        )
-
         weekly_summary = []
-        for w in range(1, horizon_weeks + 1):
-            accesses = self.schedule_source.get_accesses("A", week=w)
-            act_ids = sorted(set(a.activity_id for a in accesses))
+        for week in range(1, horizon_weeks + 1):
+            active_ids = {
+                row.activity_id
+                for row in self.schedule_source.get_accesses("A", week=week)
+            }
+            active_ids.update(
+                row.activity_id
+                for row in self.schedule_source.get_occupancies("A", week=week)
+            )
             weekly_summary.append({
-                "week": w,
-                "activeCount": len(act_ids),
-                "hasActivity": len(act_ids) > 0,
+                "week": week,
+                "activeCount": len(active_ids),
+                "hasActivity": bool(active_ids),
             })
 
+        available_sources = {s.source for s in scenarios if s.available}
+        if "mock" in available_sources:
+            source_type = "sample_outputs"
+        elif "solved" in available_sources:
+            source_type = "solved_outputs"
+        else:
+            source_type = "solver"
         return {
             "revision": {
                 "id": revision_id,

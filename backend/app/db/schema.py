@@ -127,5 +127,7 @@ def upgrade_schema(connection: sqlite3.Connection) -> None:
     ).fetchone()
     if version < 2 or bundles_table is None:
         _upgrade_to_v2(connection)
+        from backend.app.schedule_insertion.migrations import upgrade_schedule_insertion_schema
+        upgrade_schedule_insertion_schema(connection)
         if version < 2:
             connection.execute("INSERT INTO ps1_schema_version VALUES (2)")

@@ -3,7 +3,7 @@ from pathlib import Path
 import sqlite3
 
 
-LATEST_PS1_SCHEMA_VERSION = 2
+LATEST_PS1_SCHEMA_VERSION = 3
 
 
 def _upgrade_to_v2(connection: sqlite3.Connection) -> None:
@@ -184,3 +184,9 @@ def upgrade_schema(connection: sqlite3.Connection) -> None:
         upgrade_schedule_insertion_schema(connection)
         if version < 2:
             connection.execute("INSERT INTO ps1_schema_version VALUES (2)")
+            version = 2
+    if version < 3:
+        connection.execute(
+            "CREATE TABLE IF NOT EXISTS application_settings (key TEXT PRIMARY KEY, value TEXT NOT NULL)"
+        )
+        connection.execute("INSERT INTO ps1_schema_version VALUES (3)")

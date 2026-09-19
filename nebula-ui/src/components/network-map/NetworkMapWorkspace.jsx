@@ -23,8 +23,11 @@ export default function NetworkMapWorkspace({
   selectedEntity: controlledEntity,
   onSelectEntity: controlledOnSelectEntity,
   embedded = false,
+  identity = null,
+  weeklySummary: controlledWeeklySummary = null,
+  onExport,
 }) {
-  const { context, activities, loading: topoLoading, error: topoError } = useNetworkTopology();
+  const { context, activities, loading: topoLoading, error: topoError } = useNetworkTopology(identity);
 
   // Controlled or uncontrolled scenario
   const [internalScenario, setInternalScenario] = useState("A");
@@ -75,7 +78,8 @@ export default function NetworkMapWorkspace({
   const { occupancy, loading: occLoading, error: occError, retry: retryOccupancy } = useNetworkOccupancy(
     scenario,
     week,
-    selectedActivityId
+    selectedActivityId,
+    identity
   );
 
   const { isPlaying, toggle: togglePlay } = useWeeklyPlayback(
@@ -177,7 +181,6 @@ export default function NetworkMapWorkspace({
             occError={occError}
             onRetry={retryOccupancy}
           />
-
           {/* Top filter and overlay toggles */}
           <div className="filter-layer-bar mb-3 max-w-[1060px] w-full mx-auto relative z-30">
             <ActivityFilter
@@ -210,6 +213,7 @@ export default function NetworkMapWorkspace({
               onSelectEntity={handleSelectEntity}
               tooltip={tooltip}
               setTooltip={setTooltip}
+              currentWeek={week}
             />
 
             <MapTooltip tooltip={tooltip} />
@@ -224,7 +228,7 @@ export default function NetworkMapWorkspace({
               startDate={startDate}
               isPlaying={isPlaying}
               onTogglePlay={togglePlay}
-              weeklySummary={context?.weeklySummary || []}
+              weeklySummary={controlledWeeklySummary || context?.weeklySummary || []}
             />
           </div>
         </section>

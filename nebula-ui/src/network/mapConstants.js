@@ -26,6 +26,7 @@ export const DEFAULT_LAYERS = {
   mirrored: true,
   crossLine: true,
   capacity: true,
+  maintenance: true,
 };
 
 export const PLAYBACK_INTERVAL_MS = 800;

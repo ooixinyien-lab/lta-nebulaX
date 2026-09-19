@@ -121,3 +121,37 @@ def test_infeasibility_and_stale_baseline_are_truthful() -> None:
     stale = request.model_copy(update={"baseline_revision": baseline.revision + 1, "additions": []})
     stale_result = solve_schedule_insertion(problem, baseline, stale)
     assert stale_result.status == "FAILED"
+
+
+def test_unknown_replan_retains_the_last_validated_baseline(monkeypatch: pytest.MonkeyPatch) -> None:
+    problem, baseline, job = _slice()
+    initial_request = ReplanRequest(
+        baseline_id=baseline.baseline_id,
+        baseline_revision=baseline.revision,
+        scenario=ScheduleScenario.A,
+        as_of=datetime(2027, 1, 1, tzinfo=timezone.utc),
+        options=SolveOptions(time_limit_seconds=2, num_search_workers=1, optimize=False),
+    )
+    initial = solve_schedule_insertion(problem, baseline, initial_request)
+    assert initial.reference_candidate is not None
+    accepted = baseline.model_copy(update={
+        "revision": 2,
+        "project_jobs": [job],
+        "project_accesses": initial.reference_candidate.projects,
+    })
+    request = initial_request.model_copy(update={
+        "baseline_revision": accepted.revision,
+        "options": SolveOptions(time_limit_seconds=1, num_search_workers=1, optimize=False),
+    })
+    monkeypatch.setattr(
+        "backend.app.schedule_insertion.solver._solve_candidate",
+        lambda *_args, **_kwargs: (None, None, "UNKNOWN"),
+    )
+
+    result = solve_schedule_insertion(problem, accepted, request)
+
+    assert result.status == "SUCCEEDED"
+    assert result.reference_candidate is not None
+    assert result.reference_candidate.projects == accepted.project_accesses
+    assert result.reference_candidate.validation.passed
+    assert result.configuration["engine_mode"] == "retained_validated_baseline"

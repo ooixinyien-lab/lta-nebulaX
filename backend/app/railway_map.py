@@ -51,15 +51,15 @@ class NetworkMapService:
         except Exception:
             return None
 
-    def _get_problem_and_cache(self) -> tuple[ProblemInstance, FootprintCache]:
-        latest = self._latest_revision()
-        if latest is not None and self.database is not None:
-            revision_id, _revision_number = latest
-            if self._problem_revision_id != revision_id or self._problem is None:
+    def _get_problem_and_cache(self, revision_id: str | None = None) -> tuple[ProblemInstance, FootprintCache]:
+        selected = (revision_id, 0) if revision_id else self._latest_revision()
+        if selected is not None and self.database is not None:
+            rev_id, _revision_number = selected
+            if self._problem_revision_id != rev_id or self._problem is None:
                 with self.database.connection() as connection:
-                    self._problem = load_revision(connection, revision_id)
+                    self._problem = load_revision(connection, rev_id)
                 self._footprint_cache = FootprintCache(self._problem)
-                self._problem_revision_id = revision_id
+                self._problem_revision_id = rev_id
             return self._problem, self._footprint_cache
 
         # Fallback to loading directly from data directory if no database revision exists
@@ -143,9 +143,9 @@ class NetworkMapService:
             ],
         }
 
-    def get_topology(self) -> dict[str, Any]:
+    def get_topology(self, revision_id: str | None = None) -> dict[str, Any]:
         """Return logical network topology (lines, stations, sectors, locations)."""
-        problem, _cache = self._get_problem_and_cache()
+        problem, _cache = self._get_problem_and_cache(revision_id)
 
         return {
             "lines": [
@@ -184,9 +184,9 @@ class NetworkMapService:
             ],
         }
 
-    def get_activities(self) -> list[dict[str, Any]]:
+    def get_activities(self, revision_id: str | None = None) -> list[dict[str, Any]]:
         """Return all activities together with static precomputed footprints."""
-        problem, cache = self._get_problem_and_cache()
+        problem, cache = self._get_problem_and_cache(revision_id)
         results: list[dict[str, Any]] = []
 
         for act in problem.activities:

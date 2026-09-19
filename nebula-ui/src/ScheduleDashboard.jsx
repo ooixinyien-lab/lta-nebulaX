@@ -1,10 +1,9 @@
 import React, { useState, useMemo, useEffect, useCallback } from 'react';
 import { 
-  Calendar, Shield, Zap, Layers, Filter, 
+  Calendar, Zap, Layers, Filter,
   ChevronLeft, ChevronRight, X, AlertTriangle, RefreshCw,
-  Sparkles, RotateCcw, AlertOctagon, CheckCircle, Move, Check, Info
+  Sparkles, RotateCcw, AlertOctagon, CheckCircle, Move, Check
 } from 'lucide-react';
-import { fetchFullSchedule, rescheduleWithSolver } from './services/networkApi';
 import { evaluateScheduleConflicts, computeValidDropTargets } from './services/conflictChecker';
 
 // Access Type Semantic Styling
@@ -30,22 +29,32 @@ const ACCESS_TYPE_STYLES = {
     badge: 'bg-blue-900/90 text-blue-300 border-blue-500/50',
     label: 'Plant Solo'
   }
+  ,MAINT: {
+    bg: 'bg-amber-950/80 hover:bg-amber-900', border: 'border-amber-500/80', text: 'text-amber-200',
+    badge: 'bg-amber-900/90 text-amber-200 border-amber-500/50', label: 'Maintenance Work'
+  }
 };
 
 const NIGHTS_OF_WEEK = [
-  { id: 1, label: 'Mon', time: '01:30', isEclo: false },
-  { id: 2, label: 'Tue', time: '01:30', isEclo: false },
-  { id: 3, label: 'Wed', time: '01:30', isEclo: false },
-  { id: 4, label: 'Thu', time: '01:30', isEclo: false },
-  { id: 5, label: 'Fri', time: '00:30', isEclo: true },
-  { id: 6, label: 'Sat', time: '00:30', isEclo: true },
-  { id: 7, label: 'Sun', time: '01:30', isEclo: false },
+  { id: 1, label: 'Monday', isEclo: false },
+  { id: 2, label: 'Tuesday', isEclo: false },
+  { id: 3, label: 'Wednesday', isEclo: false },
+  { id: 4, label: 'Thursday', isEclo: false },
+  { id: 5, label: 'Friday', isEclo: false },
+  { id: 6, label: 'Saturday', isEclo: false },
+  { id: 7, label: 'Sunday', isEclo: false },
 ];
 
 export default function ScheduleDashboard({
   displayData = {},
+  mode,
   scenario: initialScenario = 'A',
   onScenarioChange = () => {},
+  authoritativeConflicts = [],
+  highlightedJobId = null,
+  week: controlledWeek,
+  onWeekChange,
+  onExport,
 }) {
   const [currentScenario, setCurrentScenario] = useState(initialScenario);
 
@@ -53,11 +62,17 @@ export default function ScheduleDashboard({
     setCurrentScenario(initialScenario);
   }, [initialScenario]);
   // Navigation & Filter State
-  const [activeWeek, setActiveWeek] = useState(1);
-  const [activeView, setActiveView] = useState('matrix'); // 'matrix' | 'gantt'
+  const [internalWeek, setInternalWeek] = useState(1);
+  const activeWeek = controlledWeek ?? internalWeek;
+  const setActiveWeek = (value) => {
+    const next = typeof value === 'function' ? value(activeWeek) : value;
+    if (onWeekChange) onWeekChange(next);
+    else setInternalWeek(next);
+  };
   const [lineFilter, setLineFilter] = useState('ALL');
   const [boundFilter, setBoundFilter] = useState('BOTH');
   const [showBuffers, setShowBuffers] = useState(true);
+  const [showRoutineMaintenance, setShowRoutineMaintenance] = useState(true);
   const [selectedActivity, setSelectedActivity] = useState(null);
 
   // Full Schedule State & Solver Baseline
@@ -71,6 +86,10 @@ export default function ScheduleDashboard({
   const [draggingJob, setDraggingJob] = useState(null);
   const [dragOverCell, setDragOverCell] = useState(null);
   const [manualMoveHistory, setManualMoveHistory] = useState([]);
+  const isPs1Schedule = (mode || (scheduleData?.identity || displayData?.identity)?.mode) === 'requirements';
+  const visibleNights = isPs1Schedule
+    ? NIGHTS_OF_WEEK.slice(0, 3).map((night) => ({ ...night, label: `Access night ${night.id}` }))
+    : NIGHTS_OF_WEEK;
 
   // Toast Notification Helper
   const showToast = useCallback((msg) => {
@@ -78,30 +97,16 @@ export default function ScheduleDashboard({
     setTimeout(() => setToastMessage(null), 4500);
   }, []);
 
-  // 1. Initial Data Fetch: Load complete schedule from backend if not already supplied
+  // The parent planning context owns the exact schedule identity and projection.
   useEffect(() => {
-    let isCancelled = false;
-    async function loadData() {
-      setIsLoading(true);
-      try {
-        const fullData = await fetchFullSchedule(currentScenario);
-        if (!isCancelled && fullData && fullData.activities?.length > 0) {
-          setScheduleData(fullData);
-          setSolverBaseline(JSON.parse(JSON.stringify(fullData))); // Deep clone for clean reset
-        }
-      } catch (err) {
-        console.warn('Backend full-schedule endpoint unavailable, using displayData fallback:', err.message);
-      } finally {
-        if (!isCancelled) setIsLoading(false);
-      }
-    }
-    loadData();
-    return () => { isCancelled = true; };
-  }, [currentScenario]);
+    setScheduleData(displayData?.identity ? displayData : null);
+    setSolverBaseline(displayData?.identity ? JSON.parse(JSON.stringify(displayData)) : null);
+    setIsLoading(false);
+  }, [displayData]);
 
   // Fallback / Normalized Data Elements
-  const activities = scheduleData?.activities || displayData.sample_activities || [];
-  const contracts = scheduleData?.contracts || displayData.sample_projects || [];
+  const activities = scheduleData?.activities || displayData.activities || displayData.sample_activities || [];
+  const contracts = scheduleData?.contracts || displayData.contracts || displayData.sample_projects || [];
   const locationsList = scheduleData?.locations || [];
   const sectorsList = scheduleData?.sectors || displayData.sample_sectors || [];
   const accesses = scheduleData?.accesses || [];
@@ -115,9 +120,14 @@ export default function ScheduleDashboard({
   const contractMap = useMemo(() => {
     return new Map(contracts.map(c => [c.contract_number, c]));
   }, [contracts]);
+  useEffect(() => {
+    if (!highlightedJobId) return;
+    const highlighted = activities.find((activity) => activity.activity_id === highlightedJobId);
+    if (highlighted) setSelectedActivity(highlighted);
+  }, [highlightedJobId, activities]);
 
   // 2. Real-Time AGENTS.md Conflict Evaluation
-  const conflictReport = useMemo(() => {
+  const preliminaryConflictReport = useMemo(() => {
     return evaluateScheduleConflicts({
       accesses,
       occupancies,
@@ -128,6 +138,18 @@ export default function ScheduleDashboard({
       activeWeek,
     });
   }, [accesses, occupancies, activities, contracts, locationsList, currentScenario, activeWeek]);
+  const conflictReport = useMemo(() => {
+    if (!authoritativeConflicts.length) return preliminaryConflictReport;
+    const activityConflicts = new Map();
+    authoritativeConflicts.forEach((finding) => {
+      const id = finding.job_id || finding.activity_id;
+      if (!id) return;
+      const rows = activityConflicts.get(id) || [];
+      rows.push({ rule: finding.rule, message: finding.detail });
+      activityConflicts.set(id, rows);
+    });
+    return { hasConflicts: true, totalConflicts: authoritativeConflicts.length, activityConflicts };
+  }, [authoritativeConflicts, preliminaryConflictReport]);
 
   // 3. Compute Valid Drop Targets when dragging a job
   const validDropTargets = useMemo(() => {
@@ -197,11 +219,26 @@ export default function ScheduleDashboard({
       currentWeekActs = activities.filter(a => (a.planned_start_week || 1) === activeWeek);
     }
 
+    const maintenanceActs = showRoutineMaintenance ? (scheduleData?.maintenance || [])
+      .filter((visit) => visit.week === activeWeek)
+      .flatMap((visit) => (visit.location_ids || [visit.sector_id]).map((location) => ({
+        activity_id: visit.visit_id,
+        contract_number: 'MAINTENANCE',
+        start_location: location,
+        access_night: 1,
+        access_type: 'MAINT',
+        isMaintenance: true,
+        maintenance_visit: visit,
+        eclo: 0,
+      }))) : [];
+    currentWeekActs = [...currentWeekActs, ...maintenanceActs];
+    const activeLocationIds = new Set(currentWeekActs.map((act) => act.start_location));
+
     // Compute KPIs
     const ecloCount = currentWeekActs.filter(a => a.eclo === 1).length;
     const totalSlots = currentWeekActs.length;
 
-    // Group Contracts for View C Gantt
+    // Group contracts for the Weekly Activities section.
     const contractsGrouping = {};
     currentWeekActs.forEach((act) => {
       const cNum = act.contract_number || 'C001';
@@ -210,12 +247,12 @@ export default function ScheduleDashboard({
     });
 
     return {
-      filteredLocations: locs,
+      filteredLocations: locs.filter((loc) => activeLocationIds.has(loc.sector_id)),
       weekActivities: currentWeekActs,
       weekKpis: { totalSlots, ecloCount },
       groupedContracts: contractsGrouping,
     };
-  }, [locationsList, sectorsList, activities, accesses, occupancies, activeWeek, lineFilter, boundFilter, activityMap, contractMap]);
+  }, [locationsList, sectorsList, activities, accesses, occupancies, scheduleData, activeWeek, lineFilter, boundFilter, activityMap, contractMap, showRoutineMaintenance]);
 
   // 5. Drag & Move Handlers
   const handleDragStart = (e, act) => {
@@ -292,28 +329,13 @@ export default function ScheduleDashboard({
     setDragOverCell(null);
   };
 
-  // 6. Reschedule with Solver (Reset to baseline)
+  // Restore the immutable projection currently selected by the planning context.
   const handleReschedule = async () => {
     setIsRescheduling(true);
-    try {
-      const fresh = await rescheduleWithSolver(currentScenario);
-      if (fresh) {
-        setScheduleData(fresh);
-        setSolverBaseline(JSON.parse(JSON.stringify(fresh)));
-        setManualMoveHistory([]);
-        showToast(`✓ Reset to optimal solver baseline for Scenario ${currentScenario} (0 conflicts, 100% complete)`);
-      }
-    } catch (err) {
-      if (solverBaseline) {
-        setScheduleData(JSON.parse(JSON.stringify(solverBaseline)));
-        setManualMoveHistory([]);
-        showToast(`✓ Restored to cached baseline for Scenario ${currentScenario}`);
-      } else {
-        showToast(`Solver reset failed: ${err.message}`);
-      }
-    } finally {
-      setIsRescheduling(false);
-    }
+    if (solverBaseline) setScheduleData(JSON.parse(JSON.stringify(solverBaseline)));
+    setManualMoveHistory([]);
+    showToast(`Restored active ${displayData.identity?.mode || ''} schedule identity`);
+    setIsRescheduling(false);
   };
 
   // Undo manual move
@@ -331,159 +353,8 @@ export default function ScheduleDashboard({
 
   return (
     <div className="min-h-full bg-slate-950 text-slate-100 flex flex-col font-sans select-none">
-      {/* Page controls stay below the shared application header. */}
-      <div
-        className="schedule-controls border-b border-slate-800 bg-slate-950 px-6 py-3 flex flex-wrap items-center justify-between gap-4"
-        aria-label="Schedule matrix controls"
-      >
-        {/* Planning Horizon Scrubber */}
-        <div className="flex items-center bg-slate-900 border border-slate-800 rounded-xl p-1 shadow-inner">
-          <button
-            onClick={() => setActiveWeek((w) => Math.max(1, w - 1))}
-            disabled={activeWeek === 1}
-            className="p-1.5 rounded-lg hover:bg-slate-800 disabled:opacity-30 text-slate-300 transition"
-          >
-            <ChevronLeft size={18} />
-          </button>
-
-          <div className="px-4 text-center font-mono">
-            <span className="text-xs text-slate-400 block font-sans uppercase text-[9px] tracking-widest">
-              Planning Horizon
-            </span>
-            <span className="text-sm font-bold text-cyan-400">
-              Week {activeWeek} of 30
-            </span>
-          </div>
-
-          <button
-            onClick={() => setActiveWeek((w) => Math.min(30, w + 1))}
-            disabled={activeWeek === 30}
-            className="p-1.5 rounded-lg hover:bg-slate-800 disabled:opacity-30 text-slate-300 transition"
-          >
-            <ChevronRight size={18} />
-          </button>
-        </div>
-
-        {/* Action Controls: Reschedule with Solver & Undo */}
-        <div className="flex items-center gap-2">
-          {manualMoveHistory.length > 0 && (
-            <button
-              onClick={handleUndoMove}
-              className="bg-slate-900 hover:bg-slate-800 border border-slate-700 text-slate-300 text-xs font-mono font-bold px-3 py-1.5 rounded-lg flex items-center gap-1.5 transition shadow"
-              title="Undo last manual move"
-            >
-              <RotateCcw size={13} /> Undo Move ({manualMoveHistory.length})
-            </button>
-          )}
-
-          <button
-            onClick={handleReschedule}
-            disabled={isRescheduling}
-            className="bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-400 hover:to-blue-500 text-slate-950 font-black text-xs px-3.5 py-1.5 rounded-lg flex items-center gap-2 shadow-lg shadow-cyan-500/20 transition transform active:scale-95 disabled:opacity-50 cursor-pointer"
-            title="Re-run CP-SAT solver and restore pristine schedule"
-          >
-            {isRescheduling ? (
-              <><RefreshCw size={14} className="animate-spin" /> Solving...</>
-            ) : (
-              <><Sparkles size={14} /> Reschedule with Solver</>
-            )}
-          </button>
-
-          {/* Scenario Selector */}
-          <div className="flex items-center bg-slate-900 border border-slate-800 rounded-lg p-1 ml-2">
-            {['A', 'B', 'C'].map((sc) => (
-              <button
-                key={sc}
-                onClick={() => {
-                  setCurrentScenario(sc);
-                  onScenarioChange(sc);
-                }}
-                className={`px-2.5 py-1 text-xs font-bold font-mono rounded transition cursor-pointer ${
-                  currentScenario === sc
-                    ? 'bg-cyan-600 text-white shadow'
-                    : 'text-slate-400 hover:text-slate-200'
-                }`}
-              >
-                Scen {sc}
-              </button>
-            ))}
-          </div>
-
-          {/* View Toggle */}
-          <div className="bg-slate-900 border border-slate-800 p-1 rounded-lg flex font-mono text-xs">
-            <button
-              onClick={() => setActiveView('matrix')}
-              className={`px-3 py-1 rounded-md font-bold transition flex items-center gap-1.5 ${
-                activeView === 'matrix'
-                  ? 'bg-cyan-600 text-white shadow'
-                  : 'text-slate-400 hover:text-slate-200'
-              }`}
-            >
-              <Calendar size={13} /> 7-Day Matrix
-            </button>
-            <button
-              onClick={() => setActiveView('gantt')}
-              className={`px-3 py-1 rounded-md font-bold transition flex items-center gap-1.5 ${
-                activeView === 'gantt'
-                  ? 'bg-cyan-600 text-white shadow'
-                  : 'text-slate-400 hover:text-slate-200'
-              }`}
-            >
-              <Layers size={13} /> Gantt
-            </button>
-          </div>
-        </div>
-      </div>
-
       {/* ========================================================================= */}
-      {/* 2. REAL-TIME CONFLICT STATUS BANNER */}
-      {/* ========================================================================= */}
-      <div className={`border-b px-6 py-2 flex items-center justify-between text-xs font-mono transition-all ${
-        conflictReport.hasConflicts
-          ? 'bg-rose-950/80 border-rose-800/80 text-rose-200'
-          : 'bg-emerald-950/60 border-emerald-800/60 text-emerald-300'
-      }`}>
-        <div className="flex items-center gap-3">
-          {conflictReport.hasConflicts ? (
-            <>
-              <AlertOctagon size={16} className="text-rose-400 animate-pulse" />
-              <span className="font-bold tracking-wide">
-                ⚠️ {conflictReport.totalConflicts} SCHEDULE CLASH{conflictReport.totalConflicts === 1 ? '' : 'ES'} DETECTED (AGENTS.MD CONSTRAINTS)
-              </span>
-              <span className="text-rose-400/80 text-[11px]">
-                — Clashing activities highlighted in bold red below
-              </span>
-            </>
-          ) : (
-            <>
-              <CheckCircle size={15} className="text-emerald-400" />
-              <span className="font-bold tracking-wide">
-                ✓ 100% COMPLIANT: ZERO CONSTRAINTS VIOLATED IN WEEK {activeWeek}
-              </span>
-              <span className="text-emerald-400/80 text-[11px]">
-                — Drag any job to reschedule; conflict checker validates in real-time
-              </span>
-            </>
-          )}
-        </div>
-
-        {/* Dragging Help Pill */}
-        {draggingJob && (
-          <div className="flex items-center gap-2 bg-cyan-950 border border-cyan-500/50 text-cyan-300 px-3 py-0.5 rounded-full font-bold animate-pulse">
-            <Move size={12} /> Dragging {draggingJob.activity_id} ({draggingJob.access_type}) — Valid slots highlighted in green
-          </div>
-        )}
-
-        {/* Toast Alert */}
-        {toastMessage && (
-          <div className="bg-slate-900 border border-cyan-500/60 text-cyan-300 px-3 py-0.5 rounded shadow-lg text-xs font-bold">
-            {toastMessage}
-          </div>
-        )}
-      </div>
-
-      {/* ========================================================================= */}
-      {/* 3. FILTER & KPI STRIP */}
+      {/* 2. FILTER & KPI STRIP */}
       {/* ========================================================================= */}
       <div className="border-b border-slate-800 bg-slate-900/60 px-6 py-2 flex flex-wrap items-center justify-between gap-4 text-xs font-mono">
         <div className="flex flex-wrap items-center gap-4">
@@ -523,6 +394,10 @@ export default function ScheduleDashboard({
             />
             Show Safety Buffers
           </label>
+          <label className="flex items-center gap-1.5 cursor-pointer text-slate-300 hover:text-amber-300">
+            <input type="checkbox" checked={showRoutineMaintenance} onChange={(e) => setShowRoutineMaintenance(e.target.checked)} className="accent-amber-500 rounded cursor-pointer" />
+            Show Routine Maintenance
+          </label>
         </div>
 
         {/* Capacity KPIs */}
@@ -539,6 +414,7 @@ export default function ScheduleDashboard({
               </span>
             </div>
           </div>
+          {onExport && <button type="button" onClick={onExport} className="rounded-lg border border-cyan-700 bg-cyan-950/60 px-3 py-1 text-[11px] font-bold text-cyan-200 hover:bg-cyan-900">Export CSV</button>}
         </div>
       </div>
 
@@ -554,7 +430,7 @@ export default function ScheduleDashboard({
               <RefreshCw size={24} className="animate-spin" />
               <p className="text-sm font-bold">Loading full PS1 schedule...</p>
             </div>
-          ) : activeView === 'matrix' ? (
+          ) : (
             <div className="bg-slate-950 border border-slate-800 rounded-2xl overflow-hidden shadow-2xl">
               <div className="overflow-x-auto">
                 <table className="w-full text-left border-collapse min-w-[1100px]">
@@ -565,7 +441,7 @@ export default function ScheduleDashboard({
                       </th>
 
                       {/* 7 Calendar Nights Columns (N1-N7) */}
-                      {NIGHTS_OF_WEEK.map((night) => (
+                      {visibleNights.map((night) => (
                         <th
                           key={night.id}
                           className={`p-2.5 text-center border-r border-slate-800/80 min-w-[130px] ${
@@ -573,11 +449,11 @@ export default function ScheduleDashboard({
                           }`}
                         >
                           <div className="font-bold flex items-center justify-center gap-1">
-                            {night.label} Night (N{night.id})
+                            {night.label} (N{night.id})
                             {night.isEclo && <Zap size={12} className="text-amber-400 fill-amber-400" />}
                           </div>
                           <div className="text-[10px] text-slate-500 font-normal">
-                            Access @ {night.time} HRS
+                            Contract/type weekly index — not a weekday
                           </div>
                         </th>
                       ))}
@@ -606,7 +482,7 @@ export default function ScheduleDashboard({
                         </td>
 
                         {/* 7 Night Cells */}
-                        {NIGHTS_OF_WEEK.map((night) => {
+                        {visibleNights.map((night) => {
                           const cellKey = `${loc.sector_id}_N${night.id}`;
                           const dropInfo = validDropTargets[cellKey];
                           const isDraggingActive = draggingJob !== null;
@@ -681,8 +557,8 @@ export default function ScheduleDashboard({
                                     return (
                                       <div
                                         key={act.activity_id}
-                                        draggable={true}
-                                        onDragStart={(e) => handleDragStart(e, act)}
+                                        draggable={!act.isMaintenance}
+                                        onDragStart={(e) => !act.isMaintenance && handleDragStart(e, act)}
                                         onDragEnd={handleDragEnd}
                                         onClick={() => setSelectedActivity(act)}
                                         className={`w-full text-left p-1.5 rounded-md border transition-all cursor-grab active:cursor-grabbing transform hover:scale-[1.02] ${
@@ -706,7 +582,7 @@ export default function ScheduleDashboard({
                                         </div>
 
                                         <div className="text-[10px] text-slate-300 opacity-90 truncate mt-0.5">
-                                          Contract: {act.contract_number || 'C001'} ({accessType})
+                                          {act.isMaintenance ? `Maintenance · ${act.maintenance_visit?.service_date || 'scheduled'}` : `Contract: ${act.contract_number || 'C001'} (${accessType})`}
                                         </div>
 
                                         {/* CLASH BADGE: Rendered in RED when conflict detected */}
@@ -741,48 +617,21 @@ export default function ScheduleDashboard({
                 </table>
               </div>
             </div>
-          ) : (
-            /* VIEW C: CONTRACT GANTT & RESULTS */
-            <div className="bg-slate-950 border border-slate-800 rounded-2xl p-6 shadow-2xl space-y-6 font-mono">
-              <h3 className="text-sm font-bold text-cyan-400 uppercase tracking-wider">
-                Simulated Completion Dates & Delay Overruns (RESULTS.csv)
-              </h3>
-
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                {Object.entries(groupedContracts).map(([contractNum, acts]) => {
-                  const res = (scheduleData?.contract_results || displayData.results || []).find((r) => r.contract_number === contractNum) || {};
-                  const isOverrun = res.overrun_days > 0;
-
-                  return (
-                    <div
-                      key={contractNum}
-                      className={`bg-slate-900 border rounded-xl p-4 space-y-3 ${
-                        isOverrun ? 'border-rose-600/80' : 'border-slate-800'
-                      }`}
-                    >
-                      <div className="flex justify-between items-center border-b border-slate-800 pb-2">
-                        <span className="text-sm font-bold text-slate-100">{contractNum}</span>
-                        {isOverrun ? (
-                          <span className="px-2 py-0.5 rounded bg-rose-950 border border-rose-600 text-rose-300 text-[10px] font-bold flex items-center gap-1">
-                            <AlertTriangle size={11} /> +{res.overrun_days} Days Delay
-                          </span>
-                        ) : (
-                          <span className="px-2 py-0.5 rounded bg-emerald-950 border border-emerald-600 text-emerald-300 text-[10px] font-bold">
-                            On Schedule
-                          </span>
-                        )}
-                      </div>
-
-                      <div className="text-xs space-y-1 text-slate-400">
-                        <div>Simulated Completion: <strong className="text-slate-200">{res.simulated_completion_date || 'N/A'}</strong></div>
-                        <div>Total Activities Enrolled: <strong className="text-cyan-400">{acts.length}</strong></div>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
           )}
+          <section className="bg-slate-950 border border-slate-800 rounded-2xl p-6 shadow-2xl space-y-4 font-mono">
+            <h3 className="text-sm font-bold text-cyan-400 uppercase tracking-wider">Weekly Activities</h3>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+              {Object.entries(groupedContracts).length === 0 ? <p className="text-xs text-slate-500">No activities scheduled for this week.</p> : Object.entries(groupedContracts).map(([contractNum, acts]) => {
+                const uniqueActs = Array.from(new Map(acts.map((act) => [act.activity_id, act])).values());
+                return (
+                <div key={contractNum} className="rounded-xl border border-slate-800 bg-slate-900 p-3 text-xs">
+                  <div className="flex items-center justify-between"><strong className="text-slate-100">{contractNum}</strong><span className="text-cyan-300">{uniqueActs.length} activities</span></div>
+                  <div className="mt-2 flex flex-wrap gap-1">{uniqueActs.map((act) => <span key={act.activity_id} className="rounded bg-slate-950 px-2 py-1 text-slate-300">{act.activity_id} · N{act.access_night || '-'}</span>)}</div>
+                </div>
+                );
+              })}
+            </div>
+          </section>
         </div>
 
         {/* POSSESSION INSPECTOR DRAWER */}

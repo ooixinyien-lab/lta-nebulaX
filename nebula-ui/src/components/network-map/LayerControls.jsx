@@ -40,16 +40,21 @@ export default function LayerControls({ layers, onToggleLayer }) {
         </span>
       ),
     },
+    {
+      key: "maintenance",
+      label: "Maintenance Work",
+      symbol: <span className="w-3 h-2 bg-amber-400/80 border border-amber-200 inline-block rounded-xs" />,
+    },
   ];
 
   return (
-    <div className="flex items-center gap-2 flex-wrap">
+    <div className="relative flex items-center gap-2 flex-nowrap">
       <div className="flex items-center gap-1.5 text-xs text-slate-400 font-semibold uppercase tracking-wider pr-1">
         <Layers size={13} className="text-slate-400" />
         <span>Layers:</span>
       </div>
 
-      <div className="flex items-center gap-2 flex-wrap">
+      <div className="flex items-center gap-2 flex-wrap flex-1 min-w-0">
         {layerDefs.map((def) => {
           const isActive = layers[def.key];
           return (

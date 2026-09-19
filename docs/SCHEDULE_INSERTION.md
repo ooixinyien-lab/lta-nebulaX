@@ -120,3 +120,18 @@ and a structured result diff. They do not enter the official PS1 export path.
 4. Add an emergency with a real release date and hard deadline.
 5. Replan from the resulting baseline and inspect reference/lower-disruption
    candidates and the measured diff.
+
+## React integration lifecycle
+
+Operations Mode stores an explicit `(baseline_id, baseline_revision,
+scenario, candidate_run_id?)` identity. Add Job Request creates a new immutable
+baseline revision without solving. Auto Solve targets that exact revision and
+keeps its result as a candidate. The schedule matrix and network map can review
+the candidate together before `Accept Schedule` promotes it through
+`/baselines/{id}/from-run/{run_id}`. A failed solve or stale `409` never replaces
+the accepted baseline; the client refreshes available revisions after a stale
+write.
+
+Maintenance visits and project accesses are projected together for display,
+but remain separately typed and accounted. Structured backend validation is
+authoritative; browser drag checks are preliminary feedback only.

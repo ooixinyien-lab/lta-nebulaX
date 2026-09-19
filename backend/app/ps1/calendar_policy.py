@@ -7,6 +7,7 @@ from datetime import date, timedelta
 from backend.app.domain_models import AccessScheduleRow, ProblemInstance
 from backend.app.ps1.calendar_models import (
     ContractCalendarRule,
+    FixedScheduleBundle,
     OperatingCalendarInput,
 )
 from backend.app.ps1.scoring import affected_line_codes
@@ -172,3 +173,27 @@ def can_share_service_date(
         if first_group is None or first_group != second_group:
             return False
     return True
+
+
+def scope_problem_to_bundle(
+    problem: ProblemInstance, bundle: FixedScheduleBundle
+) -> ProblemInstance:
+    """Scope problem instance to activities present in the bundle for mocked/partial inputs."""
+    active_ids = {row.activity_id for row in bundle.access_rows}
+    problem_ids = {a.activity_id for a in problem.activities}
+    if not active_ids or active_ids == problem_ids:
+        return problem
+    acts_subset = [a for a in problem.activities if a.activity_id in active_ids]
+    contracts_subset = [
+        c for c in problem.contracts if c.contract_number in {a.contract_number for a in acts_subset}
+    ]
+    return ProblemInstance(
+        lines=problem.lines,
+        stations=problem.stations,
+        sectors=problem.sectors,
+        locations=problem.locations,
+        buffer_rules=problem.buffer_rules,
+        parameters=problem.parameters,
+        contracts=contracts_subset,
+        activities=acts_subset,
+    )

@@ -24,6 +24,7 @@ from backend.app.ps1.calendar_policy import (
     candidate_dates,
     location_night,
     nightly_workfront_limit,
+    scope_problem_to_bundle,
     week_dates,
 )
 from backend.app.ps1.scoring import affected_line_codes
@@ -72,6 +73,7 @@ def calendarise(
     """Fit dates without changing any field in the source schedule bundle."""
 
     started = monotonic()
+    problem = scope_problem_to_bundle(problem, bundle)
     solve_options = options or CalendariseOptions()
     footprints = FootprintCache(problem)
     commitments = commitments or []
@@ -353,7 +355,57 @@ def calendarise(
                     < succ_start + day_var[(successor.activity_id, successor.access_seq)]
                 )
 
-    model.minimize(sum(day_var.values()))
+    # Multi-objective operational dispatch:
+    # 1. Workload Leveling: Minimize peak nightly access load per week.
+    # 2. Inter-Access Spacing: Penalize consecutive nights for the same contract in a week.
+    # 3. Weekend ECLO: Prioritize Friday and Saturday nights for ECLO possessions.
+    # 4. Tie-Breaker: Maintain minimal early-week bias for reproducible determinism.
+    obj_terms: list = []
+
+    # 1. Workload Leveling (Peak Night Load Minimization)
+    for week, accesses in accesses_by_week.items():
+        peak_load = model.new_int_var(0, len(accesses), f"peak_load[{week}]")
+        for service_date in week_dates(problem, week):
+            on_date = [
+                assignment[(a.activity_id, a.access_seq, service_date)]
+                for a in accesses
+                if (a.activity_id, a.access_seq, service_date) in assignment
+            ]
+            if on_date:
+                model.add(peak_load >= sum(on_date))
+        obj_terms.append(peak_load * 30)
+
+    # 2. Contract Inter-Access Spacing (Prevent Fatigue & Allow Curing/Repositioning)
+    for (contract_number, week), accesses in accesses_by_contract_week.items():
+        dates_in_week = sorted(week_dates(problem, week))
+        for i in range(len(dates_in_week) - 1):
+            d1, d2 = dates_in_week[i], dates_in_week[i + 1]
+            for a1 in accesses:
+                for a2 in accesses:
+                    if (a1.activity_id, a1.access_seq) >= (a2.activity_id, a2.access_seq):
+                        continue
+                    v1 = assignment.get((a1.activity_id, a1.access_seq, d1))
+                    v2 = assignment.get((a2.activity_id, a2.access_seq, d2))
+                    if v1 is not None and v2 is not None:
+                        consecutive = model.new_bool_var(
+                            f"consec[{contract_number},{week},{d1},{a1.activity_id},{a2.activity_id}]"
+                        )
+                        model.add(consecutive >= v1 + v2 - 1)
+                        obj_terms.append(consecutive * 20)
+
+    # 3. Weekend / ECLO Preferences (Friday & Saturday Preferred)
+    for access in bundle.access_rows:
+        if access.eclo:
+            for sdate in candidate_map[(access.activity_id, access.access_seq)]:
+                if sdate.weekday() not in (4, 5):  # 4 = Friday, 5 = Saturday
+                    var = assignment[(access.activity_id, access.access_seq, sdate)]
+                    obj_terms.append(var * 25)
+
+    # 4. Deterministic Tie-Breaker
+    for dv in day_var.values():
+        obj_terms.append(dv * 1)
+
+    model.minimize(sum(obj_terms))
     solver = cp_model.CpSolver()
     solver.parameters.max_time_in_seconds = solve_options.time_limit_seconds
     solver.parameters.num_search_workers = solve_options.num_search_workers

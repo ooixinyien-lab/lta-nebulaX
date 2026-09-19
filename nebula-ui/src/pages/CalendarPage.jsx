@@ -1,137 +1,154 @@
 import { useEffect, useState } from 'react';
-import { CalendarDays, ChevronLeft, ChevronRight, Upload } from 'lucide-react';
+import { CalendarDays, ChevronLeft, ChevronRight } from 'lucide-react';
 import WeekCalendar from '../components/calendar/WeekCalendar';
-import { addDays } from '../components/calendar/dateUtils';
+import { addDays, parseDateOnly } from '../components/calendar/dateUtils';
 import {
-  createCalendar,
-  createDemoCalendar,
+  autoAssignActualNights,
   getAuthConfig,
   getCalendarisation,
-  importScheduleBundle,
-  queueCalendarisation,
+  getCalendarPreviewContext,
 } from '../services/calendarApi';
 import '../styles/calendar.css';
 
-const REQUIRED_OUTPUTS = ['SCHEDULE_ACCESS.csv', 'SCHEDULE_OCCUPANCY.csv', 'RESULTS.csv'];
+const formatRange = (startDateStr) => {
+  if (!startDateStr) return '';
+  const start = parseDateOnly(startDateStr);
+  const end = parseDateOnly(addDays(startDateStr, 6));
+  const startPart = start.toLocaleDateString('en-SG', { day: 'numeric', month: 'short' });
+  const endPart = end.toLocaleDateString('en-SG', { day: 'numeric', month: 'short', year: 'numeric' });
+  return `${startPart} – ${endPart}`;
+};
 
 export default function CalendarPage({ onBack }) {
-  const [authConfig, setAuthConfig] = useState(null);
   const [identity, setIdentity] = useState('');
-  const [revisionId, setRevisionId] = useState('');
-  const [files, setFiles] = useState([]);
-  const [bundle, setBundle] = useState(null);
-  const [calendar, setCalendar] = useState(null);
+  const [selectedScenario, setSelectedScenario] = useState('A');
   const [attempt, setAttempt] = useState(null);
   const [lastComplete, setLastComplete] = useState(null);
   const [week, setWeek] = useState(1);
-  const [status, setStatus] = useState('Select the matching instance revision and solver outputs.');
-  const [busy, setBusy] = useState(false);
+  const [status, setStatus] = useState('Ready to assign actual nights from /outputs/A.');
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [authLoaded, setAuthLoaded] = useState(false);
+
+  const isPolling = Boolean(attempt?.attempt_id && ['QUEUED', 'RUNNING'].includes(attempt.status));
+  const busy = isSubmitting || isPolling;
 
   useEffect(() => {
-    getAuthConfig().then((config) => {
-      setAuthConfig(config);
-      if (config.auth_mode === 'demo' && config.demo_users.length > 0) {
-        const officer = config.demo_users.find((user) => user.role === 'officer');
-        setIdentity(officer?.id || config.demo_users[0].id);
-      }
-    }).catch((error) => setStatus(error.message));
+    let isMounted = true;
+    getAuthConfig()
+      .then((config) => {
+        if (!isMounted) return;
+        let officerId = '';
+        if (config.auth_mode === 'demo') {
+          const officer = config.demo_users?.find((user) => user.role === 'officer');
+          officerId = officer?.id || 'demo-officer';
+          setIdentity(officerId);
+        }
+        setAuthLoaded(true);
+      })
+      .catch((error) => {
+        if (isMounted) {
+          setStatus(error.message);
+          setAuthLoaded(true);
+        }
+      });
+    return () => {
+      isMounted = false;
+    };
   }, []);
 
   useEffect(() => {
-    if (!attempt?.attempt_id || !['QUEUED', 'RUNNING'].includes(attempt.status)) return undefined;
-    const timer = window.setInterval(async () => {
+    if (!authLoaded) return;
+    let isMounted = true;
+
+    getCalendarPreviewContext(identity, null, selectedScenario)
+      .then(async (context) => {
+        if (!isMounted) return;
+        if (context.last_complete_attempt_id) {
+          const lastResult = await getCalendarisation(context.last_complete_attempt_id, identity);
+          if (!isMounted) return;
+          setLastComplete(lastResult);
+          setStatus(
+            lastResult.complete
+              ? 'Actual nights assigned.'
+              : 'No complete mapping was produced for this fixed schedule and calendar.'
+          );
+        } else if (context.latest_attempt_id) {
+          const latestResult = await getCalendarisation(context.latest_attempt_id, identity);
+          if (!isMounted) return;
+          setAttempt(latestResult);
+          if (latestResult.complete) {
+            setLastComplete(latestResult);
+            setStatus('Actual nights assigned.');
+          } else {
+            setStatus('No complete mapping was produced for this fixed schedule and calendar.');
+          }
+        } else {
+          setStatus(`Ready to assign actual nights from /outputs/${selectedScenario}.`);
+        }
+      })
+      .catch(() => {
+        if (isMounted) {
+          setStatus(`Ready to assign actual nights from /outputs/${selectedScenario}.`);
+        }
+      });
+    return () => {
+      isMounted = false;
+    };
+  }, [authLoaded, identity, selectedScenario]);
+
+  useEffect(() => {
+    if (!isPolling) {
+      return undefined;
+    }
+    let cancelled = false;
+    const poll = async () => {
       try {
         const latest = await getCalendarisation(attempt.attempt_id, identity);
+        if (cancelled) return;
         setAttempt(latest);
-        if (latest.complete) setLastComplete(latest);
+        if (latest.complete) {
+          setLastComplete(latest);
+        }
         if (latest.status === 'SUCCEEDED') {
-          setStatus(latest.complete
-            ? 'All fixed accesses have been assigned an actual night.'
-            : 'No complete mapping was produced for this fixed schedule and calendar.');
+          setStatus(
+            latest.complete
+              ? 'Actual nights assigned.'
+              : 'No complete mapping was produced for this fixed schedule and calendar.'
+          );
         } else if (latest.status === 'FAILED') {
           setStatus(latest.error_message || 'Calendar assignment failed.');
         }
       } catch (error) {
-        setStatus(error.message);
+        if (!cancelled) {
+          setStatus(error.message);
+        }
       }
-    }, 1500);
-    return () => window.clearInterval(timer);
-  }, [attempt?.attempt_id, attempt?.status, identity]);
+    };
+    poll();
+    const timer = window.setInterval(poll, 1500);
+    return () => {
+      cancelled = true;
+      window.clearInterval(timer);
+    };
+  }, [isPolling, attempt?.attempt_id, identity]);
 
-  const handleFiles = (event) => {
-    const selected = Array.from(event.target.files);
-    setFiles(selected);
-    const names = new Set(selected.map((file) => file.name));
-    if (REQUIRED_OUTPUTS.every((name) => names.has(name)) && selected.length === 3) {
-      setStatus('Three solver outputs selected.');
-    } else {
-      setStatus('Select exactly SCHEDULE_ACCESS.csv, SCHEDULE_OCCUPANCY.csv and RESULTS.csv.');
-    }
-  };
-
-  const importOutputs = async () => {
-    setBusy(true);
-    setStatus('Importing and validating the fixed solver outputs…');
-    try {
-      const result = await importScheduleBundle(revisionId.trim(), files, identity);
-      setBundle(result);
-      setAttempt(null);
-      setLastComplete(null);
-      setStatus(`Imported ${result.access_count} fixed access rows without changing the source files.`);
-    } catch (error) {
-      setStatus(error.message);
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  const useDemo = async () => {
-    setBusy(true);
-    setStatus('Creating the assumed demo calendar…');
-    try {
-      const result = await createDemoCalendar(revisionId.trim(), identity);
-      setCalendar(result);
-      setStatus('Demo calendar created. Its assumptions will remain visible.');
-    } catch (error) {
-      setStatus(error.message);
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  const importCalendarJson = async (event) => {
-    const [file] = Array.from(event.target.files);
-    if (!file) return;
-    setBusy(true);
-    setStatus('Importing and validating the operating calendar…');
-    try {
-      const definition = JSON.parse(await file.text());
-      const result = await createCalendar(definition, identity);
-      setCalendar(result);
-      setStatus('Operating calendar imported.');
-    } catch (error) {
-      setStatus(error.message);
-    } finally {
-      setBusy(false);
-    }
+  const handleSelectScenario = (sc) => {
+    if (busy || sc === selectedScenario) return;
+    setAttempt(null);
+    setLastComplete(null);
+    setSelectedScenario(sc);
   };
 
   const assignNights = async () => {
-    setBusy(true);
-    setStatus('Queuing actual-night assignment…');
+    setIsSubmitting(true);
+    setStatus(`Assigning actual nights from /outputs/${selectedScenario}…`);
     try {
-      const queued = await queueCalendarisation(
-        bundle.bundle_id,
-        calendar.calendar_revision_id,
-        revisionId.trim(),
-        identity,
-      );
+      const queued = await autoAssignActualNights(identity, selectedScenario);
       setAttempt(queued);
-      setStatus('Date assignment queued. Start the calendar worker if it is not running.');
     } catch (error) {
       setStatus(error.message);
     } finally {
-      setBusy(false);
+      setIsSubmitting(false);
     }
   };
 
@@ -141,61 +158,102 @@ export default function CalendarPage({ onBack }) {
   const rangeStart = visibleResult?.horizon_start
     ? addDays(visibleResult.horizon_start, (week - 1) * 7)
     : '';
-  const range = rangeStart ? `${rangeStart} – ${addDays(rangeStart, 6)}` : '';
+  const range = formatRange(rangeStart);
 
   return (
     <main className="calendar-page">
       <header className="calendar-page__header">
         <div>
           <button className="calendar-link" type="button" onClick={onBack}>← Network map</button>
-          <h1><CalendarDays size={24} /> Actual Night Preview</h1>
+          <h1><CalendarDays size={24} /> Actual Night View</h1>
           <p>Read-only dates mapped onto an unchanged official solver output.</p>
         </div>
       </header>
 
       <section className="calendar-setup" aria-label="Calendar setup" aria-busy={busy}>
-        {authConfig?.auth_mode === 'demo' && (
-          <label>Demo profile
-            <select value={identity} onChange={(event) => setIdentity(event.target.value)}>
-              {authConfig.demo_users.map((user) => (
-                <option value={user.id} key={user.id}>{user.name}</option>
-              ))}
-            </select>
-          </label>
-        )}
-        <label>Instance revision ID
-          <input value={revisionId} onChange={(event) => setRevisionId(event.target.value)} placeholder="rev-…" />
-        </label>
-        <label className="calendar-file-label"><Upload size={15} /> Solver output CSVs
-          <input type="file" multiple accept=".csv" onChange={handleFiles} />
-        </label>
-        <button type="button" disabled={busy || !revisionId || files.length !== 3} onClick={importOutputs}>Import outputs</button>
-        <button type="button" disabled={busy || !revisionId} onClick={useDemo}>Create demo calendar</button>
-        <label className="calendar-file-label">Calendar JSON
-          <input type="file" accept="application/json,.json" onChange={importCalendarJson} />
-        </label>
-        <button className="calendar-primary" type="button" disabled={busy || !bundle || !calendar} onClick={assignNights}>Assign actual nights</button>
+        <div className="calendar-setup__meta">
+          <span className="calendar-setup__role">Planning officer</span>
+          <span className="calendar-setup__sep">·</span>
+          <span className="calendar-setup__source-label">Source:</span>
+          <div className="calendar-scenario-toggle" role="group" aria-label="Scenario output source">
+            {['A', 'B', 'C'].map((sc) => {
+              const isSelected = selectedScenario === sc;
+              return (
+                <button
+                  key={sc}
+                  type="button"
+                  className={`calendar-scenario-btn ${isSelected ? 'calendar-scenario-btn--active' : ''}`}
+                  onClick={() => handleSelectScenario(sc)}
+                  disabled={busy}
+                  aria-pressed={isSelected}
+                  aria-label={`Select /outputs/${sc}`}
+                >
+                  /outputs/{sc}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+        <button
+          className="calendar-primary"
+          type="button"
+          disabled={busy}
+          onClick={assignNights}
+        >
+          Assign actual nights
+        </button>
       </section>
 
-      <section className={`calendar-status ${attempt?.complete ? 'calendar-status--ok' : ''}`} aria-live="polite">
+      <section
+        className={`calendar-status ${visibleResult?.complete ? 'calendar-status--ok' : ''}`}
+        aria-live="polite"
+      >
         <strong>{status}</strong>
-        {calendar?.assumed_calendar && <span>Assumed demo calendar</span>}
+        {visibleResult?.assumed_calendar && <span>Assumed demo calendar</span>}
+        {visibleResult?.solver_status === 'OPTIMAL' && <span>Optimal</span>}
+        {visibleResult?.solver_status === 'FEASIBLE' && <span>Automatically generated</span>}
         {attempt?.assumptions?.length > 0 && (
-          <details><summary>Calendar assumptions</summary><ul>{attempt.assumptions.map((item) => <li key={item}>{item}</li>)}</ul></details>
+          <details>
+            <summary>Calendar assumptions</summary>
+            <ul>{attempt.assumptions.map((item) => <li key={item}>{item}</li>)}</ul>
+          </details>
         )}
         {attempt?.conflicts?.length > 0 && (
-          <ul>{attempt.conflicts.slice(0, 12).map((item, index) => <li key={`${item.rule_code}-${index}`}>{item.message}</li>)}</ul>
+          <ul>
+            {attempt.conflicts.slice(0, 12).map((item, index) => (
+              <li key={`${item.rule_code}-${index}`}>{item.message}</li>
+            ))}
+          </ul>
         )}
       </section>
 
       {visibleResult?.complete && (
         <section className="calendar-result">
           <div className="calendar-week-nav">
-            <button aria-label="Previous week" type="button" disabled={week === 1} onClick={() => setWeek((value) => value - 1)}><ChevronLeft size={18} /></button>
-            <div><strong>Week {week}</strong><span>{range}</span></div>
-            <button aria-label="Next week" type="button" disabled={week === horizonWeeks} onClick={() => setWeek((value) => value + 1)}><ChevronRight size={18} /></button>
+            <button
+              aria-label="Previous week"
+              type="button"
+              disabled={week === 1}
+              onClick={() => setWeek((value) => value - 1)}
+            >
+              <ChevronLeft size={18} />
+            </button>
+            <div>
+              <strong>Week {week}</strong>
+              <span>{range}</span>
+            </div>
+            <button
+              aria-label="Next week"
+              type="button"
+              disabled={week === horizonWeeks}
+              onClick={() => setWeek((value) => value + 1)}
+            >
+              <ChevronRight size={18} />
+            </button>
           </div>
-          <p className="calendar-caption">Scenario {visibleResult.scenario} · Source {visibleResult.bundle_id} · Calendar {visibleResult.calendar_revision_id}</p>
+          <p className="calendar-caption">
+            Scenario {visibleResult.scenario} · Source {visibleResult.bundle_id} · Calendar {visibleResult.calendar_revision_id}
+          </p>
           <WeekCalendar horizonStart={visibleResult.horizon_start} week={week} assignments={assignments} />
         </section>
       )}

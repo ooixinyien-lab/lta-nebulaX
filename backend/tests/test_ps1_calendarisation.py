@@ -673,3 +673,40 @@ def test_schema_v1_upgrades_once_and_preserves_existing_rows(tmp_path):
         assert connection.execute(
             "SELECT name FROM instances WHERE id='kept'"
         ).fetchone()[0] == "Kept"
+
+
+def test_calendarisation_workload_leveling_and_eclo_weekend_preference():
+    from collections import Counter
+    from backend.app.config import ROOT
+    from backend.app.io import load_problem_from_directory
+    from backend.app.ps1.artifacts import (
+        read_access_schedule_bytes,
+        read_occupancy_schedule_bytes,
+        read_results_bytes,
+    )
+
+    problem_inst = load_problem_from_directory(ROOT / "data")
+    scenario_dir = ROOT / "nights_outputs_mocked" / "B"
+    bundle_inst = FixedScheduleBundle(
+        bundle_id="test-leveling",
+        instance_revision_id="rev-leveling",
+        scenario="B",
+        fingerprint="fp-leveling",
+        access_rows=read_access_schedule_bytes((scenario_dir / "SCHEDULE_ACCESS.csv").read_bytes()),
+        occupancy_rows=read_occupancy_schedule_bytes((scenario_dir / "SCHEDULE_OCCUPANCY.csv").read_bytes()),
+        result_rows=read_results_bytes((scenario_dir / "RESULTS.csv").read_bytes()),
+    )
+    result = calendarise(problem_inst, bundle_inst, "cal-leveling", demo_calendar("rev-leveling"))
+    assert result.complete
+    days = Counter(a.service_date.strftime("%A") for a in result.assignments)
+
+    # 1. Workload Leveling: Workload spreads into later weekdays and weekend
+    assert days["Thursday"] > 0
+    assert days["Friday"] > 0
+    assert days["Saturday"] > 0
+
+    # 2. Weekend ECLO Preference: All ECLO accesses are scheduled on Friday or Saturday
+    eclo_days = Counter(a.service_date.strftime("%A") for a in result.assignments if a.eclo)
+    assert len(eclo_days) > 0
+    assert all(day in ("Friday", "Saturday") for day in eclo_days)
+

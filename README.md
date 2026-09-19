@@ -101,20 +101,20 @@ instance revision. It stores the original bytes unchanged and writes exact
 `service_date` values to separate operational records.
 
 1. Start FastAPI and the Vite UI as above, then open
-   `http://localhost:5173/calendar` or choose **Actual Night Preview**.
-2. The page restores the latest imported solver output, its matching instance,
-   the calendar used for its last attempt, and any previous valid date mapping.
-   On a first visit without an imported output, select the three output CSVs;
-   the instance revision is filled from the stored instance.
-3. Choose **Show calendar**. The web app imports any selected files, creates the
-   clearly labelled assumed demo calendar when needed, and starts date assignment
-   automatically. No separate worker terminal is required.
+   `http://localhost:5173/calendar` or choose **Actual Night View**.
+2. The page presents a clean, zero-input interface scoped to the **Planning officer**
+   with the automatic solver output source (defaults to `/outputs/A`). Any previously
+   completed date mapping is restored automatically on page load.
+3. Choose **Assign actual nights**. The server resolves the configured scenario output
+   directory, binds the three CSVs to the seeded official instance revision, validates the
+   fixed weekly schedule, automatically sets up or reuses the assumed demo operating
+   calendar, and queues CP-SAT actual night optimization in a single click. No file
+   pickers, revision fields, or multi-step setup buttons are required.
 
-**Advanced setup** contains source/revision overrides and optional calendar JSON
-import using [`docs/examples/operating_calendar.json`](docs/examples/operating_calendar.json).
 Refreshing the page restores stored results; it does not rerun the solver.
-The read-only week view appears only when every fixed source access receives a
-validated date. Otherwise the page displays the returned conflicts.
+The read-only week view appears when every fixed source access receives a
+validated date. Otherwise the page displays the returned conflicts while preserving
+all source CSV files and weekly scheduling decisions unchanged.
 
 For standalone queue processing or recovery after an interrupted server process,
 the optional worker remains available as

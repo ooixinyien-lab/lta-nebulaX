@@ -413,7 +413,9 @@ def load_assignments(
 
 
 def load_preview_context(
-    connection: Connection, bundle_id: str | None = None
+    connection: Connection,
+    bundle_id: str | None = None,
+    scenario: str | None = None,
 ) -> CalendarPreviewContext:
     """Restore preview inputs without generating data or choosing sample files."""
 
@@ -421,6 +423,14 @@ def load_preview_context(
         bundle = get(connection, ScheduleBundleRecord, bundle_id)
         if bundle is None:
             raise KeyError(bundle_id)
+    elif scenario is not None:
+        bundle = decode(
+            ScheduleBundleRecord,
+            connection.execute(
+                "SELECT * FROM schedule_bundles WHERE scenario=? ORDER BY created_at DESC,id DESC LIMIT 1",
+                (scenario.upper(),),
+            ).fetchone(),
+        )
     else:
         bundle = decode(
             ScheduleBundleRecord,

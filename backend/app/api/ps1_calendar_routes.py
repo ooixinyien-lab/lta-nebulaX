@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from fastapi import APIRouter, BackgroundTasks, Depends, File, Form, HTTPException, Request, UploadFile
 
+from pathlib import Path
 from backend.app.auth.dependencies import current_user, officer_only
 from backend.app.config import DEMO_USERS
 from backend.app.db.models import CalendarAttemptRecord, CalendarRevisionRecord, ScheduleBundleRecord
@@ -21,7 +22,7 @@ from backend.app.db.repositories.calendars import (
     load_preview_context,
     load_schedule_bundle,
 )
-from backend.app.db.repositories.instances import load_revision
+from backend.app.db.repositories.instances import fingerprint_files, load_revision
 from backend.app.domain_models import PS1Base
 from pydantic import Field
 from backend.app.ps1.artifacts import (
@@ -34,9 +35,11 @@ from backend.app.ps1.calendar_models import (
     CalendariseOptions,
     CalendarPreviewContext,
     DateCommitment,
+    FixedScheduleBundle,
     OperatingCalendarInput,
     demo_calendar,
 )
+from backend.app.ps1.calendar_policy import scope_problem_to_bundle
 from backend.app.ps1.calendar_validation import (
     validate_calendar_definition,
     validate_fixed_bundle,
@@ -86,14 +89,150 @@ def auth_me(user: User = Depends(current_user)):
 def get_preview_context(
     request: Request,
     bundle_id: str | None = None,
+    scenario: str | None = None,
     user: User = Depends(current_user),
 ):
     del user
     with _db(request).connection() as connection:
         try:
-            return load_preview_context(connection, bundle_id)
+            return load_preview_context(connection, bundle_id, scenario)
         except KeyError as exc:
             raise HTTPException(404, "Schedule bundle not found") from exc
+
+
+@router.post("/calendar-preview/assign-default", status_code=202)
+def assign_default_actual_nights(
+    request: Request,
+    background_tasks: BackgroundTasks,
+    scenario: str | None = None,
+    user: User = Depends(officer_only),
+):
+    settings = request.app.state.settings
+    target_scenario = (scenario or settings.actual_nights_scenario).upper()
+    if target_scenario not in {"A", "B", "C"}:
+        raise HTTPException(
+            422,
+            f"Scenario must be one of 'A', 'B', or 'C', got '{target_scenario}'",
+        )
+    output_dir = Path(settings.actual_nights_output_dir) / target_scenario
+
+    if not output_dir.is_dir():
+        raise HTTPException(
+            404,
+            f"Solver output directory not found: {output_dir}",
+        )
+    for filename in OUTPUT_FILENAMES:
+        file_path = output_dir / filename
+        if not file_path.is_file():
+            raise HTTPException(
+                404,
+                f"Required solver output file not found: {file_path}",
+            )
+
+    contents = {filename: (output_dir / filename).read_bytes() for filename in OUTPUT_FILENAMES}
+    try:
+        access_rows = read_access_schedule_bytes(contents["SCHEDULE_ACCESS.csv"])
+        occupancy_rows = read_occupancy_schedule_bytes(contents["SCHEDULE_OCCUPANCY.csv"])
+        result_rows = read_results_bytes(contents["RESULTS.csv"])
+    except ArtifactFormatError as exc:
+        raise HTTPException(422, str(exc)) from exc
+
+    scenarios = {row.scenario for row in result_rows}
+    if len(scenarios) != 1 or not scenarios <= {"A", "B", "C"}:
+        raise HTTPException(422, "RESULTS.csv must contain exactly one scenario A, B or C")
+    file_scenario = next(iter(scenarios))
+    if file_scenario != target_scenario:
+        raise HTTPException(
+            422,
+            f"RESULTS.csv scenario '{file_scenario}' does not match configured scenario '{target_scenario}'",
+        )
+
+    official_revision_id = getattr(request.app.state, "official_revision_id", None)
+    if not official_revision_id:
+        raise HTTPException(500, "Official instance revision not initialized")
+
+    with _db(request).connection() as connection:
+        try:
+            problem = load_revision(connection, official_revision_id)
+        except KeyError as exc:
+            raise HTTPException(404, f"Official instance revision '{official_revision_id}' not found") from exc
+
+    draft = {
+        "bundle_id": "validation-only",
+        "instance_revision_id": official_revision_id,
+        "scenario": target_scenario,
+        "fingerprint": "pending",
+        "access_rows": access_rows,
+        "occupancy_rows": occupancy_rows,
+        "result_rows": result_rows,
+    }
+    validation = validate_fixed_bundle(problem, FixedScheduleBundle.model_validate(draft))
+    if not validation.passed:
+        raise HTTPException(422, validation.model_dump(mode="json"))
+
+    with _db(request).connection(write=True) as connection:
+        fingerprint = fingerprint_files(contents)
+        duplicate = find_bundle(connection, official_revision_id, fingerprint)
+        bundle = create_schedule_bundle(
+            connection,
+            revision_id=official_revision_id,
+            scenario=target_scenario,
+            files=contents,
+            access_rows=access_rows,
+            occupancy_rows=occupancy_rows,
+            result_rows=result_rows,
+            validation=validation.model_dump(mode="json"),
+            created_by=user.id,
+        )
+        if duplicate is None:
+            record_event(
+                connection,
+                actor=user.id,
+                action="schedule_bundle_imported",
+                entity_type="schedule_bundle",
+                entity_id=bundle.id,
+                detail={"fingerprint": bundle.fingerprint, "scenario": target_scenario},
+            )
+
+        calendar_def = demo_calendar(official_revision_id)
+        calendar_record, cal_created = create_calendar_revision(
+            connection, calendar_def, created_by=user.id
+        )
+        if cal_created:
+            record_event(
+                connection,
+                actor=user.id,
+                action="calendar_revision_created",
+                entity_type="calendar_revision",
+                entity_id=calendar_record.id,
+                detail={"assumed_calendar": calendar_record.assumed_calendar},
+            )
+
+        attempt = create_calendar_attempt(
+            connection,
+            bundle_id=bundle.id,
+            calendar_revision_id=calendar_record.id,
+            commitments=[],
+            options=CalendariseOptions(),
+            created_by=user.id,
+        )
+        record_event(
+            connection,
+            actor=user.id,
+            action="calendarisation_queued",
+            entity_type="calendarisation_attempt",
+            entity_id=attempt.id,
+            detail={"bundle_id": bundle.id, "calendar_revision_id": calendar_record.id},
+        )
+
+    background_tasks.add_task(process_attempt, _db(request), attempt.id)
+    return {
+        "attempt_id": attempt.id,
+        "status": attempt.status,
+        "bundle_id": bundle.id,
+        "calendar_revision_id": calendar_record.id,
+        "scenario": bundle.scenario,
+    }
 
 
 @router.post("/schedule-bundles", status_code=201)
@@ -195,6 +334,7 @@ def get_schedule_bundle(
             raise HTTPException(404, "Schedule bundle not found") from exc
         stored = get(connection, ScheduleBundleRecord, bundle_id)
         files = get_bundle_file_bytes(connection, bundle_id)
+    effective_problem = scope_problem_to_bundle(problem, bundle)
     return {
         "bundle_id": bundle.bundle_id,
         "instance_revision_id": bundle.instance_revision_id,
@@ -211,7 +351,7 @@ def get_schedule_bundle(
             for row in bundle.access_rows
         ],
         "source_score": compute_score(
-            problem, bundle.scenario, bundle.access_rows, bundle.occupancy_rows
+            effective_problem, bundle.scenario, bundle.access_rows, bundle.occupancy_rows
         ).model_dump(mode="json"),
         "file_sizes": {name: len(content) for name, content in files.items()},
         "validation": stored.validation,
@@ -353,8 +493,9 @@ def get_calendarisation(
             connection, attempt.calendar_revision_id
         )
         assignments = load_assignments(connection, attempt_id) if attempt.complete else []
+        effective_problem = scope_problem_to_bundle(problem, bundle)
         source_score = compute_score(
-            problem, bundle.scenario, bundle.access_rows, bundle.occupancy_rows
+            effective_problem, bundle.scenario, bundle.access_rows, bundle.occupancy_rows
         )
     return {
         "attempt_id": attempt.id,

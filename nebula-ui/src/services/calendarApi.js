@@ -66,3 +66,22 @@ export const getCalendarisation = (attemptId, identity) => fetch(
   `/api/ps1/calendarisations/${attemptId}`,
   { headers: authHeaders(identity) },
 ).then(parseResponse);
+
+export const autoAssignActualNights = (identity, scenario = 'A') => {
+  const url = scenario
+    ? `/api/ps1/calendar-preview/assign-default?scenario=${encodeURIComponent(scenario)}`
+    : '/api/ps1/calendar-preview/assign-default';
+  return fetch(url, {
+    method: 'POST',
+    headers: { ...authHeaders(identity) },
+  }).then(parseResponse);
+};
+
+export const getCalendarPreviewContext = (identity, bundleId, scenario) => {
+  const params = new URLSearchParams();
+  if (bundleId) params.set('bundle_id', bundleId);
+  if (scenario) params.set('scenario', scenario);
+  const query = params.toString() ? `?${params.toString()}` : '';
+  return fetch(`/api/ps1/calendar-preview/context${query}`, { headers: authHeaders(identity) }).then(parseResponse);
+};
+

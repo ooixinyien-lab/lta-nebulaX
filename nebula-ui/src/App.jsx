@@ -103,7 +103,7 @@ export default function App() {
               onClick={() => setActiveTab('calendar_preview')}
               className="text-slate-400 hover:text-slate-200 transition flex items-center gap-1.5"
             >
-              <Calendar size={13} /> Actual Night Preview
+              <Calendar size={13} /> Actual Night View
             </button>
           </div>
         </div>
@@ -174,7 +174,7 @@ export default function App() {
             onClick={() => setActiveTab('calendar_preview')}
             className="flex items-center gap-2 py-1 px-3 rounded-md transition hover:bg-slate-800/50"
           >
-            <Calendar size={16} /> Actual Night Preview
+            <Calendar size={16} /> Actual Night View
           </button>
         </div>
 

@@ -19,6 +19,7 @@ from backend.app.ps1.calendar_policy import (
     candidate_dates,
     location_night,
     nightly_workfront_limit,
+    scope_problem_to_bundle,
 )
 from backend.app.ps1.scoring import build_contract_results
 from backend.app.ps1.validation import validate_schedule
@@ -30,8 +31,9 @@ def validate_fixed_bundle(
 ) -> CalendarValidationSummary:
     """Validate all official rows before any operational mapping is attempted."""
 
+    effective_problem = scope_problem_to_bundle(problem, bundle)
     weekly = validate_schedule(
-        problem, bundle.scenario, bundle.access_rows, bundle.occupancy_rows
+        effective_problem, bundle.scenario, bundle.access_rows, bundle.occupancy_rows
     )
     issues = [
         CalendarConflict(
@@ -44,7 +46,7 @@ def validate_fixed_bundle(
     ]
     try:
         expected_results = build_contract_results(
-            problem, bundle.scenario, bundle.access_rows
+            effective_problem, bundle.scenario, bundle.access_rows
         )
         results_match = sorted(
             bundle.result_rows, key=lambda row: row.contract_number
@@ -158,6 +160,7 @@ def validate_calendarisation(
     commitments: list[DateCommitment],
     assignments: list[CalendarAssignment],
 ) -> CalendarValidationSummary:
+    problem = scope_problem_to_bundle(problem, bundle)
     footprints = FootprintCache(problem)
     source_validation = validate_fixed_bundle(problem, bundle)
     issues = list(source_validation.issues)

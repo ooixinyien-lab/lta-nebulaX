@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from datetime import date
+from pathlib import Path
 import sqlite3
 
 import pytest
@@ -310,3 +311,225 @@ def test_targeted_processing_does_not_claim_another_or_repeat_completed_attempt(
     assert not process_attempt(database, attempts[1].id)
     assert not process_attempt(database, "missing")
     assert database_state(client) == before
+
+
+def test_assign_default_success_and_invariance(client, monkeypatch):
+    def forbidden(*_args, **_kwargs):
+        pytest.fail("Calendar preview must never rerun the weekly solver")
+
+    monkeypatch.setattr("backend.app.ps1.solver.solve_ps1", forbidden)
+
+    # 1. No request body required & configured scenario directory is actually read
+    scenario_dir = Path(client.app.state.settings.actual_nights_output_dir) / "A"
+    before_csv = {
+        name: (scenario_dir / name).read_bytes()
+        for name in ("SCHEDULE_ACCESS.csv", "SCHEDULE_OCCUPANCY.csv", "RESULTS.csv")
+    }
+    response = client.post("/api/ps1/calendar-preview/assign-default", headers=HEADERS)
+    assert response.status_code == 202, response.text
+    data = response.json()
+    assert "attempt_id" in data
+    bundle_id = data["bundle_id"]
+    calendar_id = data["calendar_revision_id"]
+    assert data["scenario"] == "A"
+
+    # Source CSV bytes on disk remain exactly unchanged
+    after_csv = {
+        name: (scenario_dir / name).read_bytes()
+        for name in ("SCHEDULE_ACCESS.csv", "SCHEDULE_OCCUPANCY.csv", "RESULTS.csv")
+    }
+    assert before_csv == after_csv
+
+    # Bundle stored in DB has exact matching bytes
+    with client.app.state.db.connection() as connection:
+        assert get_bundle_file_bytes(connection, bundle_id) == before_csv
+
+    # Repeated calls reuse the same source bundle & calendar fingerprints
+    repeated = client.post("/api/ps1/calendar-preview/assign-default", headers=HEADERS)
+    assert repeated.status_code == 202
+    assert repeated.json()["bundle_id"] == bundle_id
+    assert repeated.json()["calendar_revision_id"] == calendar_id
+
+    # Feasible mocked outputs produce complete assignment under assumed calendar without conflicts
+    result = client.get(f"/api/ps1/calendarisations/{data['attempt_id']}", headers=HEADERS)
+    assert result.status_code == 200
+    res_json = result.json()
+    assert res_json["status"] == "SUCCEEDED"
+    assert res_json["complete"] is True
+    assert len(res_json["conflicts"]) == 0
+    assert res_json["source_score_unchanged"] is True
+
+
+def test_assign_default_successful_assignment_returns_all_source_accesses(
+    client, tmp_path, monkeypatch
+):
+    def forbidden(*_args, **_kwargs):
+        pytest.fail("Calendar preview must never rerun the weekly solver")
+
+    monkeypatch.setattr("backend.app.ps1.solver.solve_ps1", forbidden)
+
+    # Use problem() and SOURCE_BYTES which are known to be completely feasible
+    revision_id = create_revision(client, "Feasible test revision")
+    client.app.state.official_revision_id = revision_id
+
+    test_out = tmp_path / "feasible_outputs" / "A"
+    test_out.mkdir(parents=True)
+    for name, content in SOURCE_BYTES.items():
+        (test_out / name).write_bytes(content)
+
+    client.app.state.settings.actual_nights_output_dir = tmp_path / "feasible_outputs"
+
+    res = client.post("/api/ps1/calendar-preview/assign-default", headers=HEADERS)
+    assert res.status_code == 202, res.text
+    attempt_id = res.json()["attempt_id"]
+
+    result = client.get(f"/api/ps1/calendarisations/{attempt_id}", headers=HEADERS)
+    assert result.status_code == 200
+    data = result.json()
+    assert data["status"] == "SUCCEEDED"
+    assert data["complete"] is True
+    assert len(data["assignments"]) == 2
+    assert {a["activity_id"] for a in data["assignments"]} == {"A001", "A002"}
+    assert data["source_score_unchanged"] is True
+
+
+def test_assign_default_security_and_validation_guards(client, tmp_path):
+    # Requester gets 403
+    assert client.post(
+        "/api/ps1/calendar-preview/assign-default",
+        headers={"X-Demo-User": "demo-track"},
+    ).status_code == 403
+
+    # Missing file fails clearly & no fallback to sample_outputs
+    empty_dir = tmp_path / "empty_outputs"
+    client.app.state.settings.actual_nights_output_dir = empty_dir
+    res_empty = client.post("/api/ps1/calendar-preview/assign-default", headers=HEADERS)
+    assert res_empty.status_code == 404
+    assert "not found" in res_empty.text.lower()
+
+    # Missing one of the three files fails clearly
+    partial_dir = tmp_path / "partial_outputs" / "A"
+    partial_dir.mkdir(parents=True)
+    (partial_dir / "SCHEDULE_ACCESS.csv").write_bytes(b"activity_id\n")
+    (partial_dir / "SCHEDULE_OCCUPANCY.csv").write_bytes(b"activity_id\n")
+    client.app.state.settings.actual_nights_output_dir = tmp_path / "partial_outputs"
+    res_missing = client.post("/api/ps1/calendar-preview/assign-default", headers=HEADERS)
+    assert res_missing.status_code == 404
+    assert "RESULTS.csv" in res_missing.text
+
+    # Scenario in RESULTS.csv must match configured scenario
+    mismatch_dir = tmp_path / "mismatch_outputs" / "A"
+    mismatch_dir.mkdir(parents=True)
+    for name in ("SCHEDULE_ACCESS.csv", "SCHEDULE_OCCUPANCY.csv"):
+        (mismatch_dir / name).write_bytes((ROOT / "outputs" / "A" / name).read_bytes())
+    (mismatch_dir / "RESULTS.csv").write_bytes(
+        b"scenario,contract_number,simulated_completion_date,overrun_days\r\nB,C001,2027-01-10,0\r\n"
+    )
+    client.app.state.settings.actual_nights_output_dir = tmp_path / "mismatch_outputs"
+    res_scen = client.post("/api/ps1/calendar-preview/assign-default", headers=HEADERS)
+    assert res_scen.status_code == 422
+    assert "does not match configured scenario" in res_scen.text
+
+    # Output bundle must validate against seeded official revision
+    invalid_dir = tmp_path / "invalid_outputs" / "A"
+    invalid_dir.mkdir(parents=True)
+    (invalid_dir / "SCHEDULE_ACCESS.csv").write_bytes(
+        b"activity_id,access_seq,week,eclo,access_night\r\nNONEXISTENT,1,1,0,1\r\n"
+    )
+    (invalid_dir / "SCHEDULE_OCCUPANCY.csv").write_bytes(
+        b"activity_id,week,location_id,co_share_group\r\nNONEXISTENT,1,SEC:TST:S01_S02:EB,G1\r\n"
+    )
+    (invalid_dir / "RESULTS.csv").write_bytes(
+        b"scenario,contract_number,simulated_completion_date,overrun_days\r\nA,NONEXISTENT,2027-01-10,0\r\n"
+    )
+    client.app.state.settings.actual_nights_output_dir = tmp_path / "invalid_outputs"
+    res_inv = client.post("/api/ps1/calendar-preview/assign-default", headers=HEADERS)
+    assert res_inv.status_code == 422
+
+
+def test_assign_default_changed_output_bytes_creates_new_bundle(client, tmp_path):
+    revision_id = create_revision(client, "Dynamic revision")
+    client.app.state.official_revision_id = revision_id
+
+    out_dir = tmp_path / "dynamic_outputs" / "A"
+    out_dir.mkdir(parents=True)
+    for name, content in SOURCE_BYTES.items():
+        (out_dir / name).write_bytes(content)
+
+    client.app.state.settings.actual_nights_output_dir = tmp_path / "dynamic_outputs"
+
+    first = client.post("/api/ps1/calendar-preview/assign-default", headers=HEADERS).json()
+    first_bundle_id = first["bundle_id"]
+
+    # Change bytes (add a trailing newline to SCHEDULE_ACCESS.csv)
+    (out_dir / "SCHEDULE_ACCESS.csv").write_bytes(
+        SOURCE_BYTES["SCHEDULE_ACCESS.csv"] + b"\r\n"
+    )
+
+    second = client.post("/api/ps1/calendar-preview/assign-default", headers=HEADERS).json()
+    second_bundle_id = second["bundle_id"]
+
+    assert first_bundle_id != second_bundle_id
+
+
+def test_assign_scenario_toggle_and_context_filtering(client, tmp_path):
+    revision_id = create_revision(client, "Multi-scenario revision")
+    client.app.state.official_revision_id = revision_id
+
+    # Create dummy outputs for scenario B
+    out_b = tmp_path / "multi_outputs" / "B"
+    out_b.mkdir(parents=True)
+    (out_b / "SCHEDULE_ACCESS.csv").write_bytes(SOURCE_BYTES["SCHEDULE_ACCESS.csv"])
+    (out_b / "SCHEDULE_OCCUPANCY.csv").write_bytes(SOURCE_BYTES["SCHEDULE_OCCUPANCY.csv"])
+    (out_b / "RESULTS.csv").write_bytes(
+        b"scenario,contract_number,simulated_completion_date,overrun_days\r\nB,C001,2027-01-10,0\r\n"
+    )
+
+    client.app.state.settings.actual_nights_output_dir = tmp_path / "multi_outputs"
+
+    # Invalid scenario returns 422
+    assert client.post(
+        "/api/ps1/calendar-preview/assign-default?scenario=X", headers=HEADERS
+    ).status_code == 422
+
+    # Assign Scenario B via query param
+    res_b = client.post(
+        "/api/ps1/calendar-preview/assign-default?scenario=B", headers=HEADERS
+    )
+    assert res_b.status_code == 202, res_b.text
+    data_b = res_b.json()
+    assert data_b["scenario"] == "B"
+
+    # Context query with scenario=B returns bundle for scenario B
+    ctx_b = client.get("/api/ps1/calendar-preview/context?scenario=B", headers=HEADERS)
+    assert ctx_b.status_code == 200
+    assert ctx_b.json()["bundle"]["scenario"] == "B"
+
+
+@pytest.mark.parametrize("scenario,expected_access_count", [
+    ("A", 114),
+    ("B", 104),
+    ("C", 91),
+])
+def test_mocked_outputs_produce_feasible_calendar_for_all_scenarios(
+    client, scenario, expected_access_count
+):
+    res = client.post(
+        f"/api/ps1/calendar-preview/assign-default?scenario={scenario}",
+        headers=HEADERS,
+    )
+    assert res.status_code == 202, res.text
+    attempt_id = res.json()["attempt_id"]
+    assert res.json()["scenario"] == scenario
+
+    cal_res = client.get(f"/api/ps1/calendarisations/{attempt_id}", headers=HEADERS)
+    assert cal_res.status_code == 200
+    data = cal_res.json()
+    assert data["status"] == "SUCCEEDED"
+    assert data["solver_status"] == "OPTIMAL"
+    assert data["complete"] is True
+    assert len(data["conflicts"]) == 0
+    assert len(data["assignments"]) == expected_access_count
+    assert data["source_score_unchanged"] is True
+
+

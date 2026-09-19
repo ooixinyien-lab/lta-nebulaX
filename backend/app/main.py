@@ -36,11 +36,15 @@ def create_app(settings: Settings | None = None):
     @asynccontextmanager
     async def lifespan(app):
         db.initialize()
-        seed_official_instance(db, settings.official_data_path)
+        inst_id, rev_id = seed_official_instance(db, settings.official_data_path)
+        app.state.official_instance_id = inst_id
+        app.state.official_revision_id = rev_id
         yield
     app = FastAPI(title="NEBULA X Rail Scheduling Engine", version="0.2.0", lifespan=lifespan)
     app.state.settings = settings
     app.state.db = db
+    app.state.official_instance_id = None
+    app.state.official_revision_id = None
 
     @app.exception_handler(sqlite3.OperationalError)
     async def database_error(request: Request, exc):

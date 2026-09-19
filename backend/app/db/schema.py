@@ -122,6 +122,10 @@ def upgrade_schema(connection: sqlite3.Connection) -> None:
         connection.execute("CREATE TABLE IF NOT EXISTS instance_file_contents (revision_id TEXT NOT NULL REFERENCES instance_revisions(id), filename TEXT NOT NULL, content BLOB NOT NULL, PRIMARY KEY(revision_id, filename))")
         connection.execute("INSERT INTO ps1_schema_version VALUES (1)")
         version = 1
-    if version < 2:
+    bundles_table = connection.execute(
+        "SELECT 1 FROM sqlite_master WHERE type='table' AND name='schedule_bundles'"
+    ).fetchone()
+    if version < 2 or bundles_table is None:
         _upgrade_to_v2(connection)
-        connection.execute("INSERT INTO ps1_schema_version VALUES (2)")
+        if version < 2:
+            connection.execute("INSERT INTO ps1_schema_version VALUES (2)")

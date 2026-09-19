@@ -72,7 +72,7 @@ export const addOperationalJob = (identity, addition) => requestJson(
   { method: "POST", headers: JSON_HEADERS, body: JSON.stringify({ baseline_revision: identity.baselineRevision, additions: [addition] }) },
 );
 
-export const solveOperations = (identity, asOf, timeLimitSeconds = 30) => requestJson(
+export const solveOperations = (identity, asOf, timeLimitSeconds = 120) => requestJson(
   "/api/ps1/schedule-insertion/runs",
   {
     method: "POST", headers: JSON_HEADERS,

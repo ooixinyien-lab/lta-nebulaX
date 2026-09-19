@@ -102,7 +102,7 @@ export function PlanningProvider({ children }) {
 
   const refresh = useCallback(async () => {
     if (!identity?.runId && state.mode === "requirements") { setSchedule(null); setConflicts([]); return; }
-    if (!identity?.baselineId && state.mode === "operations") { setSchedule(null); setConflicts([]); return; }
+    if ((!identity?.baselineId || !identity?.runId) && state.mode === "operations") { setSchedule(null); setConflicts([]); return; }
     const controller = new AbortController();
     setLoading(true); setError(null);
     try {

@@ -1,0 +1,16 @@
+[
+  {
+    "counterfactual_id": "cf-391",
+    "activity_id": "A017",
+    "proposal": {
+      "week": 18
+    },
+    "result": "INFEASIBLE",
+    "rule_codes": [
+      "LOCATION_CAPACITY"
+    ],
+    "measured": true,
+    "validator_provenance": "local_validator_v3",
+    "description": "Placement of A017 in week 18 was evaluated and proven infeasible due to location capacity constraints."
+  }
+]

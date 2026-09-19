@@ -1,0 +1,50 @@
+{
+  "run_id": "run-disrupted-002",
+  "scenario": "A",
+  "score": 28.2,
+  "accesses": [
+    {
+      "activity_id": "A017",
+      "access_seq": 1,
+      "week": 19,
+      "eclo": false,
+      "access_night": 1
+    },
+    {
+      "activity_id": "A017",
+      "access_seq": 2,
+      "week": 19,
+      "eclo": false,
+      "access_night": 2
+    },
+    {
+      "activity_id": "A044",
+      "access_seq": 1,
+      "week": 17,
+      "eclo": false,
+      "access_night": 1
+    }
+  ],
+  "occupancies": [
+    {
+      "activity_id": "A017",
+      "week": 19,
+      "location_id": "SEC:BET:S15_S16",
+      "co_share_group": "g2"
+    },
+    {
+      "activity_id": "A044",
+      "week": 17,
+      "location_id": "SEC:BET:S15_S16",
+      "co_share_group": "g1"
+    }
+  ],
+  "contract_results": [
+    {
+      "scenario": "A",
+      "contract_number": "C003",
+      "simulated_completion_date": "2027-05-16",
+      "overrun_days": 14
+    }
+  ]
+}

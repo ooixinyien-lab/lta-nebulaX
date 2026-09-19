@@ -1,0 +1,37 @@
+{
+  "run_id": "run-baseline-001",
+  "scenario": "A",
+  "score": 25.0,
+  "accesses": [
+    {
+      "activity_id": "A017",
+      "access_seq": 1,
+      "week": 17,
+      "eclo": false,
+      "access_night": 1
+    },
+    {
+      "activity_id": "A017",
+      "access_seq": 2,
+      "week": 17,
+      "eclo": false,
+      "access_night": 2
+    }
+  ],
+  "occupancies": [
+    {
+      "activity_id": "A017",
+      "week": 17,
+      "location_id": "SEC:BET:S15_S16",
+      "co_share_group": "g1"
+    }
+  ],
+  "contract_results": [
+    {
+      "scenario": "A",
+      "contract_number": "C003",
+      "simulated_completion_date": "2027-05-02",
+      "overrun_days": 0
+    }
+  ]
+}

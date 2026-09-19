@@ -218,7 +218,6 @@ class StationRow(PS1Base):
     is_interchange: bool
     revision_id: str
 
-
 class ScheduleBundleRecord(PS1Base):
     table: ClassVar[str] = "schedule_bundles"
     id: str
@@ -282,3 +281,47 @@ class CalendarAssignmentRecord(PS1Base):
     contract_description: str
     line_codes: list[str]
     location_ids: list[str]
+
+
+class ExplanationFactPackRow(PS1Base):
+    table: ClassVar[str] = "explanation_fact_packs"
+    id: str
+    instance_id: str
+    instance_revision_id: str
+    run_id: str
+    baseline_run_id: str | None = None
+    activity_id: str
+    facts_json: dict[str, Any]
+    fallback_summary: str
+    evidence_hash: str
+    builder_version: str
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+
+
+class ChatSessionRow(PS1Base):
+    table: ClassVar[str] = "chat_sessions"
+    id: str
+    instance_id: str
+    run_id: str
+    baseline_run_id: str | None = None
+    created_by: str
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    last_activity_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+
+
+class ChatTurnRow(PS1Base):
+    table: ClassVar[str] = "chat_turns"
+    id: str
+    session_id: str
+    user_id: str
+    question_redacted: str
+    answer_redacted: str
+    response_mode: str
+    provider: str | None = None
+    model: str | None = None
+    prompt_template_version: str | None = None
+    fact_pack_id: str | None = None
+    tool_trace_json: list[dict[str, Any]] | None = None
+    citation_json: list[dict[str, Any]] | None = None
+    uncertainty_json: list[str] | None = None
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))

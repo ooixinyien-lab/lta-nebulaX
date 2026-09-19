@@ -37,15 +37,10 @@ Operational checks do not turn an enriched run into an official submission. Any 
 Verification date: **19 September 2026**.
 
 ```sh
-python -m pytest backend/tests/test_data_layer.py backend/tests/test_ps1_scoring_validation.py backend/tests/test_ps1_solver.py -q
+python -m pytest backend/tests/test_data_layer.py backend/tests/test_ps1_scoring_validation.py backend/tests/test_ps1_solver.py backend/tests/test_ps1_database.py backend/tests/test_ps1_explanations.py backend/tests/test_ps1_chat_tools.py backend/tests/test_ps1_chat_api.py backend/tests/test_ps1_chat_security.py backend/tests/test_ps1_chat_fallback.py -q
 ```
 
-Result before calendarisation: **39 passed** (21 data/topology/I/O tests and 18 scoring/validation/solver tests). Calendarisation adds focused fixed-output solver, validator, persistence, migration, HTTP/worker and byte-preservation tests in `backend/tests/test_ps1_calendarisation.py`. This establishes local adopted-rule coverage, not parity with the unavailable official checker.
-
-The current targeted backend command, including database, startup and network API coverage,
-passes **83 tests**. The modern UI passes **11 Vitest tests**, `npm run build`,
-and `npm run lint`; lint reports two pre-existing warnings in
-`RailwayNetworkDiagram.jsx` and `ScheduleDashboard.jsx`.
+Result: **105 passed** across active test suites (data layer, scoring/validation, solver, persistence, calendarisation, schedule insertion, and grounded chatbot & explanations). Additionally, in `nebula-ui`, Vitest tests pass and `npm run build` succeeds cleanly.
 
 ---
 

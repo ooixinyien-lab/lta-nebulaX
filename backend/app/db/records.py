@@ -9,6 +9,7 @@ JSON_FIELDS = {
     'detail', 'validation_errors', 'rule_results', 'score_components',
     'validation', 'assumptions', 'definition', 'commitments', 'options',
     'conflicts', 'line_codes', 'location_ids',
+    'facts_json', 'tool_trace_json', 'citation_json', 'uncertainty_json',
 }
 
 

@@ -46,8 +46,8 @@ Upload accepts exactly eight multipart `files` parts with the required official 
 | Planned | `GET /api/ps1/replans/{id}/diff` | Compare baseline and replan | Frozen/changed/unaffected/new accesses, scenario score delta, churn decomposition and causes. |
 | Planned | `POST /api/ps1/runs/{id}/edits/preflight` | Validate a drag/move draft | Access ID, proposed week/date/pin and revision; returns structured hard conflicts, warnings and score/churn delta without mutation. |
 | Planned | `POST /api/ps1/runs/{id}/edits/repair` | Pin an accepted edit and replan movable work | Same draft plus solve budget; returns a new run or evidence of no complete solution. |
-| Planned | `GET /api/ps1/runs/{id}/explanations/{activity_id}` | Build deterministic explanation facts | Placement/diff/constraint/counterfactual fact pack and simple fallback summary. |
-| Planned | `POST /api/ps1/chat` | Ask a schedule-grounded question | Run/instance scope, question and optional selected activity; uses allowlisted read-only tools and returns citations/provenance. |
+| Implemented | `GET /api/ps1/runs/{id}/explanations/{activity_id}` | Build deterministic explanation facts | Placement/diff/constraint/counterfactual fact pack and simple fallback summary. |
+| Implemented | `POST /api/ps1/chat` | Ask a schedule-grounded question | Run/instance scope, question and optional selected activity; uses allowlisted read-only tools and returns citations/provenance. |
 
 ---
 
@@ -178,6 +178,114 @@ The legacy `/api/...` endpoints are retained to support existing prototype UI co
 | `PATCH /resources` | Officer | Add an unavailable interval or change equipment serviceability |
 | `GET /audit` | Officer | Recent local audit events |
 | `POST /demo/reset` | Demo officer only | Destructively reload synthetic seed data |
+
+---
+
+## Grounded Chat & Explanations Contracts
+
+### Explanation Fact Pack (`GET /api/ps1/runs/{run_id}/explanations/{activity_id}`)
+
+Query parameters: `baseline_run_id` (optional). Returns deterministic fact pack and fallback summary:
+
+```json
+{
+  "fact_pack": {
+    "fact_pack_id": "efp-1234abcd",
+    "generated_at": "2026-09-19T05:50:00Z",
+    "scope": {
+      "instance_id": "inst-...",
+      "instance_revision_id": "rev-...",
+      "run_id": "run-...",
+      "baseline_run_id": "run-base...",
+      "scenario": "A",
+      "data_source": "solver"
+    },
+    "activity": {
+      "activity_id": "A017",
+      "contract_number": "C003",
+      "activity_type": "C",
+      "priority": 1,
+      "planned_start_date": "2027-04-26",
+      "predecessor_activity_id": null,
+      "required_accesses": 2
+    },
+    "baseline": { "available": true, "placements": [] },
+    "current": { "available": true, "placements": [] },
+    "diff": { "changed": true, "week_displacement": 2, "date_displacement_days": null, "eclo_changed": false },
+    "frozen_state": { "is_frozen": false, "reason": null },
+    "score": { "available": true, "baseline": {}, "current": {}, "delta": {} },
+    "binding_constraints": [],
+    "conflicts": [],
+    "counterfactuals": [],
+    "availability": {
+      "official_validator": false,
+      "counterfactuals": true,
+      "replan_diff": true,
+      "baseline_available": true,
+      "cause_recorded": true,
+      "mock_data": false
+    },
+    "evidence": [],
+    "fallback_summary": "..."
+  },
+  "fallback_summary": "...",
+  "provenance": {
+    "provider": "nebula-x-deterministic",
+    "model": "efb-v1.0",
+    "prompt_template_version": "schedule-explainer-v1",
+    "instance_revision_id": "rev-...",
+    "run_id": "run-...",
+    "baseline_run_id": "run-base..."
+  }
+}
+```
+
+### Schedule Chat Turn (`POST /api/ps1/chat`)
+
+Request body:
+
+```json
+{
+  "session_id": "chat-1234abcd",
+  "instance_id": "inst-...",
+  "run_id": "run-...",
+  "baseline_run_id": "run-base...",
+  "question": "Why was A017 moved?",
+  "selected_activity_id": "A017",
+  "selected_location_id": "SEC:BET:S15_S16",
+  "selected_week": 19
+}
+```
+
+Response body:
+
+```json
+{
+  "session_id": "chat-1234abcd",
+  "answer": "A017 was displaced from week 17 to week 19...",
+  "response_mode": "gemini",
+  "fact_pack_id": "efp-1234abcd",
+  "citations": [
+    {
+      "evidence_id": "activity:A017",
+      "classification": "stored_fact",
+      "entity_type": "activity",
+      "entity_id": "A017",
+      "description": "Activity A017 belongs to contract C003."
+    }
+  ],
+  "uncertainty": [],
+  "provenance": {
+    "provider": "google",
+    "model": "gemini-3.6-flash",
+    "prompt_template_version": "schedule-explainer-v1",
+    "instance_revision_id": "rev-...",
+    "run_id": "run-...",
+    "baseline_run_id": "run-base..."
+  },
+  "tools_used": ["get_activity_diff", "get_run_conflicts"]
+}
+```
 
 ---
 

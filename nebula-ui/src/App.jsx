@@ -7,8 +7,10 @@ import ScheduleDashboard from './ScheduleDashboard';
 import NetworkMapPage from './pages/NetworkMapPage';
 import CalendarPage from './pages/CalendarPage';
 import AppHeader from './components/AppHeader';
+import { ScheduleChatProvider } from './chat/ScheduleChatContext';
+import ScheduleChatDock from './components/chatbot/ScheduleChatDock';
 
-export default function App() {
+function AppContent() {
   // Navigation & State
   const [activeTab, setActiveTab] = useState(() => {
     if (typeof window !== 'undefined' && window.location.pathname.includes('network-map')) {
@@ -192,6 +194,15 @@ export default function App() {
         </footer>
       )}
     </div>
+  );
+}
+
+export default function App() {
+  return (
+    <ScheduleChatProvider>
+      <AppContent />
+      <ScheduleChatDock />
+    </ScheduleChatProvider>
   );
 }
 

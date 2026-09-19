@@ -21,7 +21,19 @@ export const loadPlanningContext = (signal) => requestJson("/api/ps1/planning-co
 export async function uploadOfficialInstance(files) {
   const form = new FormData();
   files.forEach((file) => form.append("files", file));
-  return requestJson("/api/ps1/instances/upload", { method: "POST", body: form });
+  try {
+    return await requestJson("/api/ps1/instances/upload", { method: "POST", body: form });
+  } catch (error) {
+    if (error.status === 409 && error.payload?.detail?.revision_id) {
+      return {
+        instance_id: error.payload.detail.instance_id,
+        revision_id: error.payload.detail.revision_id,
+        fingerprint: error.payload.detail.fingerprint,
+        duplicate: true,
+      };
+    }
+    throw error;
+  }
 }
 
 export const clearPlanningDatabase = () => requestJson("/api/ps1/planning-data", { method: "DELETE" });

@@ -178,13 +178,23 @@ def upgrade_schema(connection: sqlite3.Connection) -> None:
     fact_packs_table = connection.execute(
         "SELECT 1 FROM sqlite_master WHERE type='table' AND name='explanation_fact_packs'"
     ).fetchone()
-    if version < 2 or bundles_table is None or fact_packs_table is None:
+    schedule_insertion_table = connection.execute(
+        "SELECT 1 FROM sqlite_master WHERE type='table' AND name='schedule_insertion_baselines'"
+    ).fetchone()
+    if (
+        version < 2
+        or bundles_table is None
+        or fact_packs_table is None
+        or schedule_insertion_table is None
+    ):
         _upgrade_to_v2(connection)
         from backend.app.schedule_insertion.migrations import upgrade_schedule_insertion_schema
         upgrade_schedule_insertion_schema(connection)
         if version < 2:
             connection.execute("INSERT INTO ps1_schema_version VALUES (2)")
             version = 2
+    from backend.app.schedule_insertion.migrations import upgrade_schedule_insertion_schema
+    upgrade_schedule_insertion_schema(connection)
     if version < 3:
         connection.execute(
             "CREATE TABLE IF NOT EXISTS application_settings (key TEXT PRIMARY KEY, value TEXT NOT NULL)"
